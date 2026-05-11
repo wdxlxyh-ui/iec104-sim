@@ -1,0 +1,37 @@
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Sisyphus 工作目录
+.sisyphus/
+
+# 临时测试文件
+/tmp/
+
+# Go 编译缓存
+*.test
+
+# 编译产物
+bin/
+
+# 压缩包
+*.zip
+
+# 打包产物
+dist/
+
+# 运行时日志
+logs/
+
+# 运行时配置 (用户数据)
+config/instances.json
+
+# OpenCode 工作目录
+.opencode/
+
+# 前端依赖
+web/node_modules/
+web/package-lock.json

@@ -21,12 +21,15 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
+# Switch to package root so web/dist resolves correctly
+cd "$DIR"
+
 # Start the simulator
 nohup "$DIR/bin/iec104-sim" serve \
     --http ":8080" \
     --config-dir "$CONFIG_DIR" \
     --log-dir "$LOG_DIR" \
-    --log-level info \
+    --log info \
     >> "$LOG_DIR/output.log" 2>&1 &
 
 SIM_PID=$!

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 
@@ -45,21 +46,24 @@ func (s *ConfigStore) Load() error {
 	return nil
 }
 
-// Save persists instance configurations to the JSON file.
-func (s *ConfigStore) Save() error {
-	s.mu.RLock()
+// save persists to disk. Caller must hold s.mu (read or write).
+func (s *ConfigStore) save() error {
 	data, err := json.MarshalIndent(s.configs, "", "  ")
-	s.mu.RUnlock()
 	if err != nil {
 		return err
 	}
 	if err := os.WriteFile(s.filePath, data, 0644); err != nil {
 		return err
 	}
-	s.mu.Lock()
 	s.dirty = false
-	s.mu.Unlock()
 	return nil
+}
+
+// Save persists instance configurations to the JSON file (with its own locking).
+func (s *ConfigStore) Save() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.save()
 }
 
 // List returns all instance configurations.
@@ -89,7 +93,7 @@ func (s *ConfigStore) Add(cfg model.InstanceConfig) error {
 	s.configs = append(s.configs, cfg)
 	s.dirty = true
 	s.mu.Unlock()
-	return s.Save()
+	return s.Save() // Save() acquires its own read lock
 }
 
 // Update replaces an instance configuration by ID and persists.
@@ -100,13 +104,14 @@ func (s *ConfigStore) Update(cfg model.InstanceConfig) error {
 		if c.ID == cfg.ID {
 			s.configs[i] = cfg
 			s.dirty = true
-			return s.Save()
+			return s.save() // already holding write lock
 		}
 	}
 	return nil
 }
 
 // Delete removes an instance configuration by ID and persists.
+// Returns an error if the ID is not found.
 func (s *ConfigStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -114,10 +119,10 @@ func (s *ConfigStore) Delete(id string) error {
 		if c.ID == id {
 			s.configs = append(s.configs[:i], s.configs[i+1:]...)
 			s.dirty = true
-			return s.Save()
+			return s.save() // already holding write lock
 		}
 	}
-	return nil
+	return fmt.Errorf("instance %s not found", id)
 }
 
 // Count returns the number of instance configurations.

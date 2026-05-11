@@ -253,6 +253,18 @@ func (ws *webServer) handleInstanceByID(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		req.ID = id
+		// Merge with existing config to preserve fields not sent by client
+		if existing, ok := ws.mgr.GetConfig(id); ok {
+			if req.Name == "" {
+				req.Name = existing.Name
+			}
+			if req.IEC104Port == 0 {
+				req.IEC104Port = existing.IEC104Port
+			}
+			if req.XLSXFile == "" {
+				req.XLSXFile = existing.XLSXFile
+			}
+		}
 		if err := ws.mgr.UpdateConfig(req); err != nil {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
@@ -275,7 +287,13 @@ type actionFunc func(string) error
 
 func (ws *webServer) execAction(w http.ResponseWriter, id string, fn actionFunc) {
 	if err := fn(id); err != nil {
-		writeError(w, http.StatusConflict, err.Error())
+		errMsg := err.Error()
+		// "not found" and "not running" are 404; everything else is 409
+		if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "not running") {
+			writeError(w, http.StatusNotFound, errMsg)
+		} else {
+			writeError(w, http.StatusConflict, errMsg)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "id": id})

@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"iec104-sim/internal/model"
@@ -199,8 +200,13 @@ func (m *Manager) StopInstance(id string) error {
 }
 
 // RestartInstance stops and starts an instance.
+// If the instance is not running, it is started directly.
 func (m *Manager) RestartInstance(id string) error {
 	if err := m.StopInstance(id); err != nil {
+		// If the instance is not running, just start it
+		if strings.Contains(err.Error(), "not running") {
+			return m.StartInstance(id)
+		}
 		return err
 	}
 	return m.StartInstance(id)

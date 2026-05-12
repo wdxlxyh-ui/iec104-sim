@@ -11,6 +11,8 @@ export interface InstanceConfig {
   iec104_port: number
   xlsx_file: string
   enabled?: boolean
+  http_enabled?: boolean
+  http_port?: number
 }
 
 export interface InstanceStats {
@@ -28,6 +30,8 @@ export interface InstanceState {
   iec104_port: number
   xlsx_file: string
   enabled: boolean
+  http_enabled?: boolean
+  http_port?: number
   status: 'running' | 'stopped' | 'error'
   stats?: InstanceStats
   error?: string

@@ -28,8 +28,11 @@
 
           <template v-if="inst.stats">
             <el-descriptions :column="1" size="small" border style="margin-bottom: 12px">
-              <el-descriptions-item label="端口">
+              <el-descriptions-item label="IEC104端口">
                 <el-tag size="small">{{ inst.iec104_port }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="HTTP端口" v-if="inst.http_enabled">
+                <el-tag size="small" type="warning">{{ inst.http_port }}</el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="客户端">
                 <el-tag :type="inst.stats.client_connected ? 'success' : 'danger'" size="small">

@@ -65,6 +65,12 @@
             <el-option v-for="f in availableFiles" :key="f.name" :label="f.name" :value="f.name" />
           </el-select>
         </el-form-item>
+        <el-form-item label="HTTP接口">
+          <el-switch v-model="form.http_enabled" active-text="启用HTTP修改测点值" />
+        </el-form-item>
+        <el-form-item label="HTTP端口" v-if="form.http_enabled" prop="http_port">
+          <el-input-number v-model="form.http_port" :min="1024" :max="65535" style="width: 100%" />
+        </el-form-item>
         <el-form-item label="上传新文件">
           <el-upload :auto-upload="false" :show-file-list="false" accept=".xlsx" :on-change="handleFileChange">
             <el-button type="primary">选择 Excel 文件</el-button>
@@ -112,6 +118,8 @@ const form = ref<InstanceConfig>({
   name: '',
   iec104_port: 2404,
   xlsx_file: '',
+  http_enabled: false,
+  http_port: 8081,
 })
 
 const rules = {
@@ -144,6 +152,8 @@ function handleEdit(row: InstanceState) {
     name: row.name,
     iec104_port: row.iec104_port,
     xlsx_file: row.xlsx_file,
+    http_enabled: row.http_enabled ?? false,
+    http_port: row.http_port ?? 8081,
   }
   showAddDialog.value = true
 }
@@ -229,7 +239,7 @@ async function handleUploadFirst() {
 
 function resetForm() {
   editing.value = false
-  form.value = { name: '', iec104_port: 2404, xlsx_file: '' }
+  form.value = { name: '', iec104_port: 2404, xlsx_file: '', http_enabled: false, http_port: 8081 }
   selectedFile.value = null
 }
 

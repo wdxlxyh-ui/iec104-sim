@@ -253,7 +253,6 @@ func (ws *webServer) handleInstanceByID(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		req.ID = id
-		// Merge with existing config to preserve fields not sent by client
 		if existing, ok := ws.mgr.GetConfig(id); ok {
 			if req.Name == "" {
 				req.Name = existing.Name
@@ -263,6 +262,9 @@ func (ws *webServer) handleInstanceByID(w http.ResponseWriter, r *http.Request) 
 			}
 			if req.XLSXFile == "" {
 				req.XLSXFile = existing.XLSXFile
+			}
+			if !req.HttpEnabled && req.HttpPort == 0 {
+				req.HttpPort = existing.HttpPort
 			}
 		}
 		if err := ws.mgr.UpdateConfig(req); err != nil {
@@ -373,6 +375,8 @@ func instanceStateToMap(s *model.InstanceState) map[string]interface{} {
 		"iec104_port": s.Config.IEC104Port,
 		"xlsx_file":   s.Config.XLSXFile,
 		"enabled":     s.Config.Enabled,
+		"http_enabled": s.Config.HttpEnabled,
+		"http_port":    s.Config.HttpPort,
 		"status":      string(s.Status),
 	}
 	if s.Status == model.StatusRunning {
@@ -400,6 +404,9 @@ func validateConfig(cfg model.InstanceConfig) error {
 	}
 	if cfg.XLSXFile == "" {
 		return fmt.Errorf("xlsx_file is required")
+	}
+	if cfg.HttpEnabled && (cfg.HttpPort < 1 || cfg.HttpPort > 65535) {
+		return fmt.Errorf("http_port must be 1-65535 when http is enabled")
 	}
 	return nil
 }

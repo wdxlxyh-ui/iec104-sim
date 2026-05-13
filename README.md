@@ -1,180 +1,246 @@
-# IEC 60870-5-104 Simulator
+# IEC 60870-5-104 模拟器
 
-A multi-instance IEC 104 slave simulator for substation automation testing, written in Go. Simulates RTUs and bay-level devices for SCADA system development and integration testing.
+[![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-## Features
+**IEC104 从站模拟器**，用于变电站自动化测试。支持多实例并行运行，模拟 RTU 及间隔层设备，适用于 SCADA 系统开发和集成测试。
 
-- **Two operating modes**
-  - **Legacy mode**: Single process = single port + single client, pure CLI
-  - **Server mode** (`serve` subcommand): Multi-instance lifecycle management with a Vue 3 web UI
-- **Excel-driven point configuration** — define IOA, point type, coefficient, and initial values in `.xlsx`
-- **Full IEC 104 support**
-  - Telemetry AI (M_ME_NC_1), teleindication DI (M_SP_NA_1), pulse PI (M_IT_NA_1)
-  - Remote control DO (C_SC_NA_1), remote adjustment AO (C_SE_NC_1)
-  - General interrogation (C_IC_NA_1), counter interrogation (C_CI_NA_1)
-  - Spontaneous change update (COT=3)
-  - Quality descriptor (QDS) simulation: invalid / not-topical / substituted / overflow / blocked
-- **RESTful HTTP API** — query, update (single & batch), modify QDS
-- **Web management UI** — instance CRUD, start/stop/restart, live monitoring (auto-refresh every 5s)
-- **Statistics** — uptime, interrogation count, control count, spontaneous count per instance
-- **Single-client enforcement** — rejects duplicate connections per instance
-- **Cross-compilation** — Linux amd64 / arm64, Windows amd64, `.deb` packaging
+---
 
-## Tech Stack
+## 版本历史
 
-| Layer | Choice |
-|-------|--------|
-| Language | Go 1.21+ |
-| IEC 104 library | [go-iecp5](https://github.com/wendy512/go-iecp5) |
-| Excel parsing | [excelize](https://github.com/xuri/excelize/v2) v2 |
-| Frontend | Vue 3 + TypeScript + Element Plus |
-| Build tool | Vite |
-| CLI flags | [pflag](https://github.com/spf13/pflag) |
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| **v2.1** | 2026-05 | **重大更新** — 实例详情页，支持测点高频刷新、置数、9种自动变化策略、批量配置、导出/导入 |
+| v2.0.1 | 2026-05 | HTTP 开关控制、API 文档、iptables 防火墙自动管理 |
+| v2.0 | 2026-05 | 多实例管理模式（serve 子命令）、Vue 3 Web 管理界面 |
+| v1.0 | - | 传统单实例模式 |
 
-## Quick Start
+### v2.1 新特性
 
-### Legacy Mode (single instance)
+- **实例详情页** — 测点值 100ms~1000ms 可调高频轮询刷新
+- **置数操作** — AI 数值输入、DI 开关（ON/OFF）、PI 整数输入，置数成功绿色提示
+- **自动变化引擎（9种策略）**
+  - 递增 / 随机 / CSV 回放 / MAX / MIN / SOC 计算 / 电量统计
+  - **新增** AO关联（AO被遥控时同步更新关联点）
+  - **新增** 接口更新（仅允许 HTTP API 写入，其余拒绝）
+- **批量配置** — 勾选多个测点，批量应用自动变化策略
+- **导出/导入** — 自动变化配置 JSON 导出/导入
+- **CSV 导出** — 测点实时数据导出为 CSV（信息体地址/名称/类型/值/时间）
+- **CSV 上传** — 为 CSV 回放策略上传时间序列文件
+- **置数隔离** — 置数值独立存储，不随实时数据刷新覆盖
+
+---
+
+## 功能特性
+
+- **双运行模式**
+  - **传统模式** — 单进程 = 单端口 + 单客户端，纯 CLI
+  - **服务模式** (`serve`) — 多实例生命周期管理 + Vue 3 Web 界面
+- **Excel 点表配置** — 在 `.xlsx` 中定义 IOA、点类型、系数、初始值
+- **完整 IEC 104 协议支持**
+  - 遥测 AI (M_ME_NC_1)、遥信 DI (M_SP_NA_1)、遥脉 PI (M_IT_NA_1)
+  - 遥控 DO (C_SC_NA_1)、遥调 AO (C_SE_NC_1)
+  - 总召唤 (C_IC_NA_1)、电度召唤 (C_CI_NA_1)
+  - 变化上送 (COT=3)
+  - 品质描述 QDS：无效 / 非当前 / 替代 / 溢出 / 闭锁
+- **RESTful HTTP API** — 查询、单点/批量更新、修改 QDS
+- **Web 管理界面** — 实例增删改查、启停、运行监控（自动刷新）
+- **运行统计** — 运行时长、总召唤次数、遥控次数、变化上送次数
+- **单客户端限制** — 每个实例只接受一个客户端连接
+- **跨平台编译** — Linux amd64/arm64、Windows amd64、`.deb` 打包
+- **自动变更策略** — 9种内置策略，后台独立 goroutine 调度，实例启停自动管理
+
+---
+
+## 技术栈
+
+| 层 | 选型 |
+|------|-------|
+| 语言 | Go 1.21+ |
+| IEC 104 库 | [go-iecp5](https://github.com/wendy512/go-iecp5) |
+| Excel 解析 | [excelize](https://github.com/xuri/excelize/v2) v2 |
+| 前端 | Vue 3 + TypeScript + Element Plus |
+| 构建工具 | Vite |
+| 命令行 | [pflag](https://github.com/spf13/pflag) |
+
+---
+
+## 快速开始
+
+### 方式一：下载压缩包（推荐）
 
 ```bash
-go build -o bin/iec104-sim.exe ./cmd/iec104-sim/
-./bin/iec104-sim.exe -p 2404 -c samples/point.xlsx -H :8080 -l info
+tar xzf iec104-sim-v2.1.tar.gz
+cd iec104-sim-v2.1
+./start.sh
+# 浏览器访问 http://localhost:8989
 ```
 
-### Server Mode (multi-instance with Web UI)
+### 方式二：源码构建
 
 ```bash
-# Build the frontend first (requires Node.js)
+# 构建前端（需要 Node.js）
 cd web && npm install && npm run build && cd ..
 
-# Build and run
-go build -o bin/iec104-sim.exe ./cmd/iec104-sim/
-./bin/iec104-sim.exe serve --http :8080 --config-dir ./config --log-dir ./logs
+# 构建后端
+go build -o bin/iec104-sim ./cmd/iec104-sim/
 
-# Open http://localhost:8080 in browser
+# 启动服务
+./bin/iec104-sim serve --http :8989 --config-dir ./config --log-dir ./logs
+
+# 浏览器访问 http://localhost:8989
 ```
 
-### CLI Flags
+### 传统模式（单实例）
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--port` | `-p` | 2404 | IEC 104 server TCP port (legacy mode) |
-| `--config` | `-c` | required | Path to `.xlsx` config (legacy mode) |
-| `--http` | `-H` | `:8080` | HTTP API listen address |
-| `--log` | `-l` | `info` | Log level: debug / info / warn / error |
-| `--config-dir` | `-c` | `./config` | Config directory (server mode) |
-| `--log-dir` | `-L` | `./logs` | Log directory (server mode) |
+```bash
+go build -o bin/iec104-sim ./cmd/iec104-sim/
+./bin/iec104-sim -p 2404 -c samples/point.xlsx -H :8080 -l info
+```
 
-## Configuration (Excel Point Table)
+### 命令行参数
 
-Format: `.xlsx` with sheet name `point`.
+| 参数 | 缩写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--port` | `-p` | 2404 | IEC 104 服务端 TCP 端口（传统模式） |
+| `--config` | `-c` | 必填 | `.xlsx` 配置文件路径（传统模式） |
+| `--http` | `-H` | `:8989` | HTTP API 监听地址 |
+| `--log` | `-l` | `info` | 日志级别: debug / info / warn / error |
+| `--config-dir` | `-c` | `./config` | 配置文件目录（服务模式） |
+| `--log-dir` | `-L` | `./logs` | 日志文件目录（服务模式） |
 
-| Column | Header | Type | Required | Description |
+---
+
+## 点表配置（Excel）
+
+格式：`.xlsx`，工作表名称 `point`。
+
+| 列 | 表头 | 类型 | 必填 | 说明 |
 |--------|--------|------|----------|-------------|
-| A | point-name | string | yes | Point name, e.g. "母线电压" |
-| B | point-number | uint32 | yes | IOA, unique per point type |
-| C | value-type | string | yes | Data type: FLOAT / DOUBLE / INT / BIT |
-| D | point-type | string | yes | Point type: AI / DI / PI / DO / AO |
-| E | efficient | float64 | yes | Scaling factor |
-| F | base-value | float64 | yes | Initial value |
-| G | alias | string | no | Alias or description |
+| A | point-name | string | 是 | 测点名称，如"母线电压" |
+| B | point-number | uint32 | 是 | IOA，同类型测点唯一 |
+| C | value-type | string | 是 | 数据类型：FLOAT / DOUBLE / INT / BIT |
+| D | point-type | string | 是 | 测点类型：AI / DI / PI / DO / AO |
+| E | efficient | float64 | 是 | 系数 |
+| F | base-value | float64 | 是 | 初始值 |
+| G | alias | string | 否 | 别名或描述 |
 
-### Point Type Mapping
+### 测点类型说明
 
-| Type | Chinese | Function | IEC 104 TypeID | Data |
+| 类型 | 中文 | 功能 | IEC 104 类型标识 | 数据 |
 |------|---------|----------|----------------|------|
-| AI | 遥测 YC | Analog monitor | M_ME_NC_1 (13) | float32, value = base × efficient |
-| DI | 遥信 YX | Digital monitor | M_SP_NA_1 (1) | bool 0/1 |
-| PI | 遥脉 YM | Pulse counter | M_IT_NA_1 (15) | int32 |
-| DO | 遥控 | Remote control | C_SC_NA_1 (45) | Accepts external control, updates DI point |
-| AO | 遥调 | Remote adjustment | C_SE_NC_1 (48) | Accepts external control, updates AI point |
+| AI | 遥测 YC | 模拟量监视 | M_ME_NC_1 (13) | float32, value = base × efficient |
+| DI | 遥信 YX | 数字量监视 | M_SP_NA_1 (1) | bool 0/1 |
+| PI | 遥脉 YM | 脉冲计数 | M_IT_NA_1 (15) | int32 |
+| DO | 遥控 | 远程控制 | C_SC_NA_1 (45) | 接收外部控制，更新 DI 点 |
+| AO | 遥调 | 远程调节 | C_SE_NC_1 (48) | 接收外部控制，更新 AI 点 |
+
+---
 
 ## HTTP API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/points` | List all points |
-| `GET` | `/api/points/{ioa}` | Get a single point |
-| `PUT` | `/api/points/{ioa}` | Update point value + trigger spontaneous |
-| `POST` | `/api/points` | Batch update point values |
-| `PUT` | `/api/points/{ioa}/qds` | Update quality descriptor |
-| `GET` | `/api/status` | Server runtime status |
+### 实例管理 API（服务模式）
 
-### Examples
+| 方法 | 端点 | 说明 |
+|--------|----------|-------------|
+| `GET` | `/api/v1/instances` | 列出所有已配置实例 |
+| `POST` | `/api/v1/instances` | 创建新实例配置 |
+| `GET` | `/api/v1/instances/{id}` | 获取实例详情 |
+| `PUT` | `/api/v1/instances/{id}` | 更新实例配置 |
+| `DELETE` | `/api/v1/instances/{id}` | 删除实例配置 |
+| `POST` | `/api/v1/instances/{id}/start` | 启动实例 |
+| `POST` | `/api/v1/instances/{id}/stop` | 停止实例 |
+| `POST` | `/api/v1/instances/{id}/restart` | 重启实例 |
+| `GET` | `/api/v1/status` | 全局服务状态 |
+| `POST` | `/api/v1/upload` | 上传 `.xlsx` 点表文件 |
+
+### 详情页 API（v2.1 新增）
+
+| 方法 | 端点 | 说明 |
+|--------|----------|-------------|
+| `GET` | `/api/v1/instances/{id}/points` | 获取所有测点实时快照 |
+| `GET` | `/api/v1/instances/{id}/points/{ioa}` | 获取单个测点快照 |
+| `PUT` | `/api/v1/instances/{id}/points/{ioa}` | 置数（写入点值） |
+| `GET` | `/api/v1/instances/{id}/points/auto-change/{ioa}` | 获取自动变化配置 |
+| `PUT` | `/api/v1/instances/{id}/points/auto-change/{ioa}` | 配置自动变化 |
+| `DELETE` | `/api/v1/instances/{id}/points/auto-change/{ioa}` | 删除自动变化配置 |
+| `PUT` | `/api/v1/instances/{id}/points/auto-change/batch` | 批量配置自动变化 |
+| `GET` | `/api/v1/instances/{id}/points/auto-change/export` | 导出自动变化配置 |
+| `POST` | `/api/v1/instances/{id}/points/auto-change/import` | 导入自动变化配置 |
+| `GET` | `/api/v1/instances/{id}/points/export` | 导出测点 CSV 数据 |
+| `POST` | `/api/v1/instances/{id}/upload-csv` | 上传 CSV 回放文件 |
+
+### 实例级 API（传统模式）
+
+| 方法 | 端点 | 说明 |
+|--------|----------|-------------|
+| `GET` | `/api/points` | 列出所有测点 |
+| `GET` | `/api/points/{ioa}` | 获取单个测点 |
+| `PUT` | `/api/points/{ioa}` | 更新测点值 + 触发变化上送 |
+| `POST` | `/api/points` | 批量更新测点值 |
+| `PUT` | `/api/points/{ioa}/qds` | 更新品质描述 QDS |
+| `GET` | `/api/status` | 服务运行状态 |
+
+### 置数示例
 
 ```bash
-# List all points
-curl http://localhost:8080/api/points
-
-# Get single point
-curl http://localhost:8080/api/points/16385
-
-# Update telemetry value (triggers spontaneous update)
-curl -X PUT http://localhost:8080/api/points/16385 \
+# 设置遥测值
+curl -X PUT http://localhost:8989/api/v1/instances/{id}/points/16385 \
   -H 'Content-Type: application/json' \
   -d '{"value": 235.5}'
 
-# Update digital point
-curl -X PUT http://localhost:8080/api/points/5 \
+# 设置遥信值（开关量）
+curl -X PUT http://localhost:8989/api/v1/instances/{id}/points/5 \
   -H 'Content-Type: application/json' \
   -d '{"bool_value": true}'
 
-# Batch update
-curl -X POST http://localhost:8080/api/points \
+# 配置自动变化（递增策略）
+curl -X PUT http://localhost:8989/api/v1/instances/{id}/points/auto-change/16385 \
   -H 'Content-Type: application/json' \
-  -d '{"points": [{"ioa": 16385, "value": 999.99}, {"ioa": 5, "bool_value": false}]}'
-
-# Update quality descriptor
-curl -X PUT http://localhost:8080/api/points/16385/qds \
-  -H 'Content-Type: application/json' \
-  -d '{"invalid": true, "blocked": true}'
-
-# Server status
-curl http://localhost:8080/api/status
+  -d '{"strategy":"increment","enabled":true,"params":{"start_value":0,"step":1,"period_ms":1000,"max_value":100}}'
 ```
 
-### Server Mode Management API
+---
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/instances` | List all configured instances |
-| `POST` | `/api/v1/instances` | Create a new instance config |
-| `GET` | `/api/v1/instances/{id}` | Get instance details |
-| `PUT` | `/api/v1/instances/{id}` | Update instance config |
-| `DELETE` | `/api/v1/instances/{id}` | Delete instance config |
-| `POST` | `/api/v1/instances/{id}/start` | Start an instance |
-| `POST` | `/api/v1/instances/{id}/stop` | Stop an instance |
-| `POST` | `/api/v1/instances/{id}/restart` | Restart an instance |
-| `GET` | `/api/v1/status` | Global server status |
-| `POST` | `/api/v1/upload` | Upload `.xlsx` point table file |
-
-## Project Structure
+## 项目结构
 
 ```
-├── cmd/iec104-sim/        Entrypoint (legacy mode + server mode)
+├── cmd/iec104-sim/        入口（传统模式 + 服务模式）
 ├── internal/
-│   ├── manager/           Multi-instance lifecycle manager (max 10)
-│   ├── model/             Instance config & state data models
-│   └── storage/           JSON-backed config persistence
+│   ├── detail/            v2.1 详情页模块
+│   │   ├── engine.go      自动变化调度引擎
+│   │   ├── strategy.go    9种策略计算逻辑
+│   │   ├── handler.go     详情页 HTTP API
+│   │   └── store.go       自动变化配置持久化
+│   ├── manager/           多实例生命周期管理（最多10个）
+│   ├── model/             数据模型（实例配置/状态/详情）
+│   └── storage/           JSON 配置持久化
 ├── pkg/
-│   ├── api/               HTTP API handlers (point CRUD, status)
-│   ├── config/            Excel loader (.xlsx) + Point data model
-│   ├── iec104/            IEC 104 server (connect, interrogation, control, publish)
-│   └── library/           Concurrent-safe in-memory point store
-├── web/                   Vue 3 + Element Plus frontend
-│   ├── src/views/         ConfigPage.vue, MonitorPage.vue
-│   └── src/api/           Axios API client
-├── scripts/               start.sh / stop.sh / restart.sh
-├── config/                instances.json (runtime persistence)
-└── samples/               Example point.xlsx
+│   ├── api/               HTTP API 处理器
+│   ├── config/            Excel 加载器 + 测点数据模型
+│   ├── iec104/            IEC 104 服务端
+│   └── library/           并发安全内存点表
+├── web/                   Vue 3 + Element Plus 前端
+│   ├── src/views/
+│   │   ├── ConfigPage.vue     配置管理
+│   │   ├── MonitorPage.vue    运行监控
+│   │   └── DetailPage.vue     v2.1 实例详情页
+│   └── src/api/           Axios API 客户端
+├── scripts/               启停脚本
+├── config/                运行时配置
+└── samples/               示例点表
 ```
 
-## Building
+---
+
+## 编译构建
 
 ```bash
-# Local development
-go build -o bin/iec104-sim.exe ./cmd/iec104-sim/
+# 本地开发
+go build -o bin/iec104-sim ./cmd/iec104-sim/
 
-# Linux amd64 (Debian, Ubuntu, Kylin)
+# Linux amd64
 make build-linux-amd64
 
 # Linux arm64
@@ -183,43 +249,63 @@ make build-linux-arm64
 # Windows amd64
 make build-windows
 
-# All platforms
+# 全平台
 make build-all
 
-# Full build with Web UI
+# 完整构建（含 Web UI）
 make build-full
 
-# Debian packaging
-make deb-amd64    # or deb-arm64
+# Debian 打包
+make deb-amd64    # 或 deb-arm64
 
-# UPX compress (reduce ~60% size)
+# UPX 压缩（减少约 60% 体积）
 make compress
 ```
 
-## Typical Use Cases
+---
 
-### Substation telemetry simulation
+## 典型使用场景
+
+### 变电站遥测仿真
 
 ```bash
-# Start simulator (Substation A, port 2404)
-./iec104-sim -p 2404 -c substation_a.xlsx -H :8080
+# 启动模拟器（变电站 A，端口 2404）
+./iec104-sim -p 2404 -c samples/point.xlsx -H :8080
 
-# Simulate voltage change via HTTP API
-curl -X PUT http://localhost:8080/api/points/1001 \
+# 通过 HTTP API 模拟电压变化
+curl -X PUT http://localhost:8080/api/points/16385 \
   -H 'Content-Type: application/json' \
   -d '{"value": 235.5}'
-# → IEC 104 client receives spontaneous update (COT=3)
+# → IEC 104 客户端收到变化上送 (COT=3)
 ```
 
-### Multi-instance deployment
+### 多实例部署
 
 ```bash
-# Process 1: 220kV substation
-./iec104-sim serve --http :8080 --config-dir ./config220
+# 进程 1：220kV 变电站
+./iec104-sim serve --http :8989 --config-dir ./config220
 
-# Process 2: 110kV substation
-./iec104-sim serve --http :8081 --config-dir ./config110
+# 进程 2：110kV 变电站
+./iec104-sim serve --http :8990 --config-dir ./config110
 ```
+
+---
+
+## 自动变化策略说明（v2.1）
+
+| 策略 | 说明 | 适用场景 |
+|--------|------|-------------|
+| 递增 | 每周期 += 步长，达最大值后回起始值 | 模拟缓慢上升的遥测量 |
+| 随机 | 在 [min, max] 范围内随机取值 | 模拟噪声或波动信号 |
+| CSV 回放 | 按 CSV 文件定义的时间序列播放 | 回放真实录波数据 |
+| MAX | 取多个 IOA 的最大值 | 联锁逻辑模拟 |
+| MIN | 取多个 IOA 的最小值 | 联锁逻辑模拟 |
+| SOC | 基于功率积分计算电池荷电状态 | 储能系统仿真 |
+| 电量 | 基于功率积分计算累计电量 | 电能计量仿真 |
+| AO关联 | 跟随指定 AO 点的遥控值变化 | 遥调联动模拟 |
+| 接口更新 | 仅允许 HTTP API 写入，引擎不做计算 | 外部系统联调 |
+
+---
 
 ## License
 

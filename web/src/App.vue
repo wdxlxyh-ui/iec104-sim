@@ -1,5 +1,5 @@
 <template>
-  <el-container style="height: 100vh">
+  <el-container style="height: 100vh; flex-direction: column">
     <header class="app-header">
       <h2>IEC104 模拟器管理系统 v2.1</h2>
       <el-tag v-if="status" class="header-status-tag">

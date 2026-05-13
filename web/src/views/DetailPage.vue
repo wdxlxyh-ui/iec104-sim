@@ -9,13 +9,22 @@
           <el-tag v-else type="info" size="small">已停止</el-tag>
         </div>
         <div style="display: flex; align-items: center; gap: 8px">
-          <span style="font-size: 13px; color: #666">刷新频率:</span>
-          <el-select v-model="refreshRate" size="small" style="width: 110px" @change="restartPolling">
-            <el-option label="100ms" :value="100" />
-            <el-option label="200ms" :value="200" />
-            <el-option label="500ms" :value="500" />
-            <el-option label="1000ms" :value="1000" />
-          </el-select>
+          <el-switch
+            v-model="pollingEnabled"
+            size="small"
+            active-text="刷新"
+            inactive-text="停止"
+            @change="togglePolling"
+          />
+          <template v-if="pollingEnabled">
+            <span style="font-size: 13px; color: #666">频率:</span>
+            <el-select v-model="refreshRate" size="small" style="width: 110px" @change="restartPolling">
+              <el-option label="100ms" :value="100" />
+              <el-option label="200ms" :value="200" />
+              <el-option label="500ms" :value="500" />
+              <el-option label="1000ms" :value="1000" />
+            </el-select>
+          </template>
           <span style="font-size: 12px; color: #999">{{ points.length }} 个测点</span>
         </div>
       </div>
@@ -295,6 +304,7 @@ const instanceName = ref('')
 const instanceStatus = ref('')
 const points = ref<PointSnapshot[]>([])
 const refreshRate = ref(200)
+const pollingEnabled = ref(true)
 const setValues = reactive<Record<number, string | number>>({})
 const autoStrategies = reactive<Record<number, string>>({})
 const selectedIoas = reactive<Record<number, boolean>>({})
@@ -405,8 +415,19 @@ function restartPolling() {
     clearInterval(pollTimer)
     pollTimer = null
   }
-  if (instanceStatus.value !== 'running') return
+  if (instanceStatus.value !== 'running' || !pollingEnabled.value) return
   pollTimer = setInterval(fetchPoints, refreshRate.value)
+}
+
+function togglePolling(val: boolean) {
+  if (val) {
+    restartPolling()
+  } else {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
 }
 
 async function doSetValue(row: PointSnapshot, overrideVal?: number | undefined) {
@@ -638,7 +659,10 @@ onMounted(async () => {
   await loadInstanceState()
   if (instanceStatus.value === 'running') {
     await fetchPoints()
+    pollingEnabled.value = true
     restartPolling()
+  } else {
+    pollingEnabled.value = false
   }
 })
 

@@ -67,6 +67,10 @@ func (h *DetailHandler) handlePointsByIOA(w http.ResponseWriter, r *http.Request
 		h.handleAutoChangeConfig(w, r, parts)
 		return
 	}
+	if parts[0] == "batch" && r.Method == http.MethodPost {
+		h.batchSetValue(w, r)
+		return
+	}
 
 	ioa, err := strconv.ParseUint(parts[0], 10, 32)
 	if err != nil {
@@ -240,6 +244,106 @@ func (h *DetailHandler) setValue(w http.ResponseWriter, r *http.Request, ioa uin
 		"success": true,
 		"ioa":     ioa,
 		"changed": changed,
+	})
+}
+
+// batchSetValue handles POST /points/batch — write multiple point values in one request.
+// This is the core interface for automated testing: it ensures all points are written
+// within a single request, so EGC polls see consistent data.
+func (h *DetailHandler) batchSetValue(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Points []struct {
+			IOA       uint32   `json:"ioa"`
+			Value     *float64 `json:"value"`
+			BoolValue *bool    `json:"bool_value"`
+			IntValue  *int32   `json:"int_value"`
+		} `json:"points"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	if len(body.Points) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty points array"})
+		return
+	}
+
+	type result struct {
+		IOA     uint32 `json:"ioa"`
+		Success bool   `json:"success"`
+		Changed bool   `json:"changed,omitempty"`
+		Error   string `json:"error,omitempty"`
+	}
+	results := make([]result, 0, len(body.Points))
+	succeeded := 0
+
+	for _, pt := range body.Points {
+		p, ok := h.store.Get(pt.IOA)
+		if !ok {
+			results = append(results, result{IOA: pt.IOA, Success: false, Error: "point not found"})
+			continue
+		}
+		if !IsSetValueAllowed(p.PointType) {
+			results = append(results, result{IOA: pt.IOA, Success: false, Error: "AO/DO does not support set-value"})
+			continue
+		}
+		if !h.engine.CheckAPIWriteAllowed(pt.IOA) {
+			results = append(results, result{IOA: pt.IOA, Success: false, Error: "point has auto-change strategy that blocks API writes"})
+			continue
+		}
+
+		var changed bool
+		switch p.PointType {
+		case config.TypeAI:
+			if pt.Value != nil {
+				if _, err := h.store.SetValue(pt.IOA, *pt.Value); err == nil {
+					changed = true
+				}
+			}
+		case config.TypeDI:
+			if pt.BoolValue != nil {
+				if _, err := h.store.SetBoolValue(pt.IOA, *pt.BoolValue); err == nil {
+					changed = true
+				}
+			} else if pt.Value != nil {
+				bv := int64(*pt.Value) != 0
+				if _, err := h.store.SetBoolValue(pt.IOA, bv); err == nil {
+					changed = true
+				}
+			}
+		case config.TypePI:
+			if pt.IntValue != nil {
+				if _, err := h.store.SetIntValue(pt.IOA, *pt.IntValue); err == nil {
+					changed = true
+				}
+			} else if pt.Value != nil {
+				if _, err := h.store.SetIntValue(pt.IOA, int32(*pt.Value)); err == nil {
+					changed = true
+				}
+			}
+		}
+
+		if changed {
+			h.engine.HandleAOFollow(pt.IOA)
+			pub, ok := h.store.Get(pt.IOA)
+			if ok {
+				h.engine.pub.Publish(pub)
+			}
+			succeeded++
+		}
+		results = append(results, result{
+			IOA:     pt.IOA,
+			Success: true,
+			Changed: changed,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"results":   results,
+		"total":     len(body.Points),
+		"succeeded": succeeded,
+		"failed":    len(body.Points) - succeeded,
 	})
 }
 
@@ -801,5 +905,18 @@ func (h *DetailHandler) HandleUploadCSV(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *DetailHandler) HandleAutoChangeConfig(w http.ResponseWriter, r *http.Request, parts []string) {
+	defer h.recoverPanic(w)
 	h.handleAutoChangeConfig(w, r, parts)
+}
+
+func (h *DetailHandler) HandleBatchSetValue(w http.ResponseWriter, r *http.Request) {
+	defer h.recoverPanic(w)
+	h.batchSetValue(w, r)
+}
+
+func (h *DetailHandler) recoverPanic(w http.ResponseWriter) {
+	if rec := recover(); rec != nil {
+		slog.Error("panic recovered in detail handler", "instance", h.instID, "recover", rec)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
 }

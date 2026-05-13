@@ -28,7 +28,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var version = "2.1.1"
+var version = "2.1.2"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
@@ -325,6 +325,13 @@ func (ws *webServer) execAction(w http.ResponseWriter, id string, fn actionFunc)
 }
 
 func (ws *webServer) handleInstancePoints(w http.ResponseWriter, r *http.Request, id string) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("panic recovered in handleInstancePoints", "instance", id, "recover", rec)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+	}()
+
 	store := ws.mgr.GetStore(id)
 	engine := ws.mgr.GetEngine(id)
 	if store == nil || engine == nil {
@@ -346,6 +353,8 @@ func (ws *webServer) handleInstancePoints(w http.ResponseWriter, r *http.Request
 		detailHandler.HandleExportCSV(w, r)
 	case parts[0] == "auto-change":
 		detailHandler.HandleAutoChangeConfig(w, r, parts)
+	case parts[0] == "batch" && r.Method == http.MethodPost:
+		detailHandler.HandleBatchSetValue(w, r)
 	default:
 		ioa, err := strconv.ParseUint(parts[0], 10, 32)
 		if err != nil {

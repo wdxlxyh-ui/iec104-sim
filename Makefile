@@ -1,5 +1,5 @@
 PROJECT   := iec104-sim
-VERSION   := 2.0.0
+VERSION   := 2.1.0
 LDFLAGS   := -ldflags="-s -w -X main.version=$(VERSION)"
 DIST_DIR  := dist
 BIN_DIR   := bin
@@ -39,30 +39,57 @@ web-build:
 # ── 完整构建 (含前端) ───────────────────────────────────
 build-full: web-build build-linux-amd64
 
-# ── 打包 tar.gz ──────────────────────────────────────────
-dist: build-full
-	@mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)/{bin,config,logs,resources}
-	# 复制二进制
-	cp $(BIN_DIR)/$(PROJECT)-linux-amd64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)/bin/$(PROJECT)
-	# 复制脚本
-	cp scripts/*.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)/bin/
-	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)/bin/*.sh
-	# 初始化配置
-	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)/config/instances.json
-	# 占位文件
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)/logs/.gitkeep
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)/resources/.gitkeep
-	# 复制前端
-	@if [ -d web/dist ]; then \
-		cp -r web/dist $(DIST_DIR)/$(PROJECT)-v$(VERSION)/web; \
-	fi
-	# 打包
-	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(VERSION)-linux-amd64.tar.gz $(PROJECT)-v$(VERSION)/
-	cd $(DIST_DIR) && zip -r $(PROJECT)-v$(VERSION)-linux-amd64.zip $(PROJECT)-v$(VERSION)/
+# ── 三平台全部打包 tar.gz/zip ──────────────────────────
+dist: web-build build-all
 	@echo ""
-	@echo "=== 打包完成 ==="
+	@echo "=== 打包三平台发行包 ==="
+	@echo ""
+	# Linux amd64
+	@mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/{bin,config,logs,resources}
+	cp $(BIN_DIR)/$(PROJECT)-linux-amd64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/$(PROJECT)
+	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/
+	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/*.sh
+	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/instances.json
+	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs/.gitkeep
+	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources/.gitkeep
+	@if [ -d web/dist ]; then \
+		cp -r web/dist $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/web; \
+	fi
+	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(VERSION)-linux-amd64.tar.gz $(PROJECT)-v$(VERSION)-linux-amd64/
+	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64
+	@echo "  ✔ $(PROJECT)-v$(VERSION)-linux-amd64.tar.gz"
+	# Linux arm64
+	@mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/{bin,config,logs,resources}
+	cp $(BIN_DIR)/$(PROJECT)-linux-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/$(PROJECT)
+	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/
+	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/*.sh
+	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config/instances.json
+	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/logs/.gitkeep
+	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/resources/.gitkeep
+	@if [ -d web/dist ]; then \
+		cp -r web/dist $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/web; \
+	fi
+	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(VERSION)-linux-arm64.tar.gz $(PROJECT)-v$(VERSION)-linux-arm64/
+	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64
+	@echo "  ✔ $(PROJECT)-v$(VERSION)-linux-arm64.tar.gz"
+	# Windows amd64 (zip)
+	@mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/{bin,scripts,config,logs,resources}
+	cp $(BIN_DIR)/$(PROJECT).exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/$(PROJECT).exe
+	cp scripts/start.bat scripts/stop.bat scripts/restart.bat $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/scripts/
+	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/config/instances.json
+	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/logs/.gitkeep
+	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/resources/.gitkeep
+	@if [ -d web/dist ]; then \
+		cp -r web/dist $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/web; \
+	fi
+	cd $(DIST_DIR) && zip -rq $(PROJECT)-v$(VERSION)-windows-amd64.zip $(PROJECT)-v$(VERSION)-windows-amd64/
+	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64
+	@echo "  ✔ $(PROJECT)-v$(VERSION)-windows-amd64.zip"
+	@echo ""
+	@echo "=== 三平台打包完成 ==="
 	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64.tar.gz
-	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64.zip
+	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64.tar.gz
+	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64.zip
 	@echo ""
 
 # ── .deb 打包 ───────────────────────────────────────────

@@ -14,7 +14,7 @@ set -euo pipefail
 
 # ─── Config ───────────────────────────────────────────────────────────────
 PROJECT="iec104-sim"
-VERSION="2.0.0"
+VERSION="2.1.0"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="$ROOT/dist"
 GO_CMD="${GO:-go}"

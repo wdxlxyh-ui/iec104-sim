@@ -173,9 +173,11 @@ func runServerMode() {
 }
 
 func (ws *webServer) registerRoutes(mux *http.ServeMux, configDir string) {
-	// Resolve web/dist relative to executable path, not CWD
+	// Resolve web/dist relative to executable path.
+	// IMPORTANT: 二进制位于 bin/ 目录，前端位于 ../web/dist（包根目录/web/dist）。
+	// 禁止使用 ./web/dist（依赖 CWD）或 bin/web/dist（路径错误）。
 	exePath, _ := os.Executable()
-	webDir := filepath.Join(filepath.Dir(exePath), "web", "dist")
+	webDir := filepath.Join(filepath.Dir(exePath), "..", "web", "dist")
 
 	mux.HandleFunc("/api/v1/instances", ws.handleInstances)
 	mux.HandleFunc("/api/v1/instances/", ws.handleInstanceByID)

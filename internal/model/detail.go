@@ -14,6 +14,7 @@ const (
 	StrategyEnergy    StrategyType = "energy"
 	StrategyAOFollow  StrategyType = "aofollow"
 	StrategyAPIUpdate StrategyType = "apiupdate"
+	StrategyManual   StrategyType = "manual"
 )
 
 type StrategyParams struct {

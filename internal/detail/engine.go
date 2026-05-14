@@ -146,7 +146,7 @@ func (e *Engine) startTask(cfg *model.AutoChangeConfig) {
 }
 
 func (e *Engine) startTaskLocked(cfg *model.AutoChangeConfig) {
-	if cfg.Strategy == model.StrategyAOFollow || cfg.Strategy == model.StrategyAPIUpdate {
+	if cfg.Strategy == model.StrategyAOFollow || cfg.Strategy == model.StrategyAPIUpdate || cfg.Strategy == model.StrategyManual {
 		return
 	}
 

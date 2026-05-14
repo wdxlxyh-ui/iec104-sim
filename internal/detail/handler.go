@@ -488,7 +488,7 @@ func (h *DetailHandler) exportAutoConfig(w http.ResponseWriter, r *http.Request)
 	writer.Write([]string{"信息体地址", "测点名称", "自动变化模式", "A", "B", "C", "D", "E", "F", "G"})
 
 	// Legend rows: explain codes and A~G mapping per strategy
-	writer.Write([]string{"", "代码说明", "1=递增 2=随机 3=CSV 4=取大 5=取小 6=SOC 7=电量 8=AO关联 9=接口更新", "", "", "", "", "", "", ""})
+	writer.Write([]string{"", "代码说明", "1=递增 2=随机 3=CSV 4=取大 5=取小 6=SOC 7=电量 8=AO关联 9=接口更新 10=手动", "", "", "", "", "", "", ""})
 	writer.Write([]string{"", "递增(A~D)", "A=起始值 B=步长 C=周期(ms) D=最大值", "", "", "", "", "", "", ""})
 	writer.Write([]string{"", "随机(A~D)", "A=最小值 B=最大值 C=周期(ms) D=小数位数", "", "", "", "", "", "", ""})
 	writer.Write([]string{"", "MAX/MIN(A~B)", "A=IOA列表(分号分隔) B=关联IOA", "", "", "", "", "", "", ""})
@@ -496,7 +496,7 @@ func (h *DetailHandler) exportAutoConfig(w http.ResponseWriter, r *http.Request)
 	writer.Write([]string{"", "电量(A~D)", "A=初始电量(kWh) B=统计类别(0充电/1放电) C=功率AI点号 D=积分周期(ms)", "", "", "", "", "", "", ""})
 	writer.Write([]string{"", "AO关联(A)", "A=关联AO点号", "", "", "", "", "", "", ""})
 	writer.Write([]string{"", "接口更新(A)", "A=初始值", "", "", "", "", "", "", ""})
-	writer.Write([]string{"", "CSV", "不支持表格导入，请在界面中单独配置", "", "", "", "", "", "", ""})
+	writer.Write([]string{"", "手动", "不自动计算，需通过API置数", "", "", "", "", "", "", ""})
 
 	// Sort points by IOA ascending for consistent output
 	sort.Slice(points, func(i, j int) bool {
@@ -743,6 +743,7 @@ func strategyToCode(s model.StrategyType) string {
 		model.StrategyEnergy:    "7",
 		model.StrategyAOFollow:  "8",
 		model.StrategyAPIUpdate: "9",
+		model.StrategyManual:   "10",
 	}
 	return m[s]
 }
@@ -847,6 +848,8 @@ func codeToStrategy(code string) model.StrategyType {
 		return model.StrategyAOFollow
 	case "9":
 		return model.StrategyAPIUpdate
+	case "10":
+		return model.StrategyManual
 	}
 	// Also match by name (case-insensitive)
 	switch strings.ToLower(strings.TrimSpace(code)) {
@@ -868,6 +871,8 @@ func codeToStrategy(code string) model.StrategyType {
 		return model.StrategyAOFollow
 	case "apiupdate":
 		return model.StrategyAPIUpdate
+	case "manual":
+		return model.StrategyManual
 	}
 	return ""
 }

@@ -40,6 +40,8 @@ func (sr *strategyRunner) runOnce(cfg *model.AutoChangeConfig, state *strategySt
 		sr.doSOC(cfg, state)
 	case model.StrategyEnergy:
 		sr.doEnergy(cfg, state)
+	case model.StrategyManual:
+		// manual 策略不做自动计算，值由用户 API 置数
 	}
 }
 

@@ -29,7 +29,7 @@ GET /api/v1/status
 **响应 200：**
 ```json
 {
-  "version": "2.1.1",
+  "version": "2.1.3",
   "mode": "serve",
   "configured": 2,
   "running": 1,

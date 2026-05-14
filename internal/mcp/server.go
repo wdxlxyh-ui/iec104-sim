@@ -230,10 +230,10 @@ func NewDataInterfaceServer(client *SimulatorClient) *server.MCPServer {
 
 	// config_auto_change
 	s.AddTool(mcp.NewTool("config_auto_change",
-		mcp.WithDescription("配置测点的自动变化策略。支持: increment(递增), random(随机), csv(回放), max(取大), min(取小), soc(SOC), energy(电量), aofollow(AO关联), apiupdate(接口更新)"),
+		mcp.WithDescription("配置测点的自动变化策略。支持: increment(递增), random(随机), csv(回放), max(取大), min(取小), soc(SOC), energy(电量), aofollow(AO关联), apiupdate(接口更新), manual(手动)"),
 		mcp.WithString("instance_id", mcp.Description("实例ID")),
 		mcp.WithNumber("ioa", mcp.Description("信息体地址")),
-		mcp.WithString("strategy", mcp.Description("策略类型: increment/random/csv/max/min/soc/energy/aofollow/apiupdate")),
+		mcp.WithString("strategy", mcp.Description("策略类型: increment/random/csv/max/min/soc/energy/aofollow/apiupdate/manual")),
 		mcp.WithBoolean("enabled", mcp.Description("是否启用"), ),
 		mcp.WithString("params", mcp.Description("策略参数 JSON 字符串，如 {\"start_value\":0,\"step\":1,\"period_ms\":1000,\"max_value\":100}")),
 	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {

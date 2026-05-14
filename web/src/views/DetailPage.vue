@@ -386,11 +386,10 @@ function formatTime(ts: string): string {
 }
 
 function displayValue(p: PointSnapshot): string {
-  const sv = setValues[p.ioa]
-  if (sv !== undefined) return String(sv)
-  if (p.point_type === 'DI') return p.bool_value ? '1' : '0'
+  if (p.point_type === 'DI') return p.bool_value ? 'ON' : 'OFF'
   if (p.point_type === 'AI') return p.value.toFixed(2)
   if (p.point_type === 'PI') return String(p.int_value)
+  if (p.point_type === 'AO' || p.point_type === 'DO') return String(p.value)
   return String(p.value)
 }
 
@@ -417,10 +416,13 @@ async function fetchPoints() {
    try {
      const res = await getPoints(instanceId.value)
      points.value = res.points
-     // 初始化 setValues，保持用户已输入的值不被覆盖
+     // 仅初始化 AI/PI/DI 的置数输入框初值，AO/DO 无置数 UI 不初始化
      res.points.forEach(p => {
-       if (!(p.ioa in setValues)) {
-         setValues[p.ioa] = p.point_type === 'DI' ? (p.bool_value ? 1 : 0) : p.value
+       if (p.ioa in setValues) return
+       if (p.point_type === 'AI' || p.point_type === 'PI') {
+         setValues[p.ioa] = p.value
+       } else if (p.point_type === 'DI') {
+         setValues[p.ioa] = p.bool_value ? 1 : 0
        }
      })
    } catch (e: any) {
@@ -453,13 +455,20 @@ async function doSetValue(row: PointSnapshot, overrideVal?: number | undefined) 
   let val: number | undefined = overrideVal
 
   if (val === undefined) {
-    const input = document.querySelector(`.el-input-number`) as any
-    val = parseFloat(setValues[ioa] as string) || row.value
+    const raw = setValues[ioa]
+    if (raw !== undefined && raw !== '') {
+      val = parseFloat(String(raw))
+      if (isNaN(val)) val = undefined
+    }
+    if (val === undefined) {
+      ElMessage.warning('请先输入要置数的值')
+      return
+    }
   }
 
   let body: any
   if (row.point_type === 'DI') {
-    body = { bool_value: val === 1 || val === 0 ? Boolean(val) : val !== 0 }
+    body = { bool_value: val !== 0 }
   } else if (row.point_type === 'PI') {
     body = { int_value: Math.round(val) }
   } else {

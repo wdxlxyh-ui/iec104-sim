@@ -78,13 +78,13 @@
               </template>
               <template v-else-if="row.point_type === 'DI'">
                 <el-switch
-                  :model-value="row.bool_value"
-                  :key="row.ioa"
-                  @change="(val: boolean) => doSetValue(row, val ? 1 : 0)"
-                  size="small"
-                  active-text="ON"
-                  inactive-text="OFF"
-                />
+                   :model-value="!!setValues[row.ioa]"
+                   :key="row.ioa"
+                   @change="(val: boolean) => doSetValue(row, val ? 1 : 0)"
+                   size="small"
+                   active-text="ON"
+                   inactive-text="OFF"
+                 />
               </template>
               <template v-else>
                 <div style="display: flex; gap: 4px">
@@ -93,7 +93,6 @@
                      size="small"
                      :step="row.point_type === 'PI' ? 1 : 0.1"
                      :controls="false"
-                     :disabled="!isSetValueEnabled(row.ioa)"
                      style="width: 80px"
                      @update:model-value="(v: number | null) => { setValues[row.ioa] = (v ?? '') as string | number }"
                      @keydown.enter.prevent="() => doSetValue(row)"
@@ -401,11 +400,8 @@ function autoStrategyLabel(ioa: number): string {
   return autoStrategies[ioa] || '配置'
 }
 
-function isSetValueEnabled(ioa: number): boolean {
-  const s = autoStrategies[ioa]
-  // 无策略 / 手动 / 接口更新 → 可置数；其他策略 → 禁用
-  return !s || s === 'manual' || s === 'apiupdate'
-}
+// DI 用 setValues[ioa] 存储用户最近一次点击的值，
+// 初始化时设为后端当前值，此后只随用户点击更新，不再被后端轮询覆盖
 
 function goBack() {
   router.push('/monitor')

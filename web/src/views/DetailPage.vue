@@ -64,16 +64,13 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="测点值更新时间" width="165">
-            <template #default="{ row }">
-<span v-if="row.ioa in setValues" style="color: #67c23a; font-size: 12px">
-              {{ formatTime(row.updated_at) }}
-            </span>
-            <span v-else style="font-size: 12px; color: #666">
-              {{ formatTime(row.updated_at) }}
-            </span>
-            </template>
-          </el-table-column>
+<el-table-column label="测点值更新时间" width="165">
+             <template #default="{ row }">
+               <span style="font-size: 12px; color: #666">
+                 {{ formatTime(row.updated_at) }}
+               </span>
+             </template>
+           </el-table-column>
           <el-table-column label="置数" width="150">
             <template #default="{ row }">
               <template v-if="row.point_type === 'AO' || row.point_type === 'DO'">
@@ -81,7 +78,7 @@
               </template>
               <template v-else-if="row.point_type === 'DI'">
                 <el-switch
-                  :model-value="!!setValues[row.ioa]"
+                  :model-value="row.bool_value"
                   @change="(val: boolean) => doSetValue(row, val ? 1 : 0)"
                   size="small"
                   active-text="ON"
@@ -91,14 +88,14 @@
               <template v-else>
                 <div style="display: flex; gap: 4px">
 <el-input-number
-                     :model-value="setValues[row.ioa]"
+                     :model-value="setValues[row.ioa] ?? null"
                      size="small"
                      :step="row.point_type === 'PI' ? 1 : 0.1"
                      :controls="false"
                      :disabled="autoStrategies[row.ioa] && autoStrategies[row.ioa] !== 'manual' && autoStrategies[row.ioa] !== 'apiupdate'"
                      style="width: 80px"
-                     @input="(val: number | undefined) => { setValues[row.ioa] = val ?? '' }"
-                     @keydown.enter="(e: any) => doSetValue(row, parseFloat((e.target as HTMLInputElement).value))"
+                     @update:model-value="(v: number | null) => { setValues[row.ioa] = (v ?? '') as string | number }"
+                     @keydown.enter.prevent="() => doSetValue(row)"
                    />
                   <el-button size="small" type="primary" @click="doSetValue(row, undefined)">置数</el-button>
                 </div>

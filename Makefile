@@ -50,7 +50,7 @@ dist: web-build build-all
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources
-	cp $(BIN_DIR)/$(PROJECT) $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/$(PROJECT)
+cp $(BIN_DIR)/$(PROJECT)-linux-amd64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/$(PROJECT)
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/*.sh
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/instances.json
@@ -67,7 +67,7 @@ dist: web-build build-all
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/logs
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/resources
-	cp $(BIN_DIR)/$(PROJECT)-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/$(PROJECT)
+cp $(BIN_DIR)/$(PROJECT)-linux-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/$(PROJECT)
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/*.sh
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config/instances.json

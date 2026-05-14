@@ -328,7 +328,6 @@ const autoDialogIOA = ref(0)
 const autoDialogPointName = ref('')
 const autoStrategyTab = ref('increment')
 const batchMode = ref(false)
-const batchApplyAll = ref(false)
 
 const autoForm = reactive({
   start_value: 0,
@@ -388,12 +387,6 @@ function displayValue(p: PointSnapshot): string {
   if (p.point_type === 'PI') return String(p.int_value)
   if (p.point_type === 'AO' || p.point_type === 'DO') return String(p.value)
   return String(p.value)
-}
-
-function diValue(p: PointSnapshot): boolean {
-  const sv = setValues[p.ioa]
-  if (sv !== undefined) return sv === 1 || sv === '1'
-  return p.bool_value
 }
 
 function autoStrategyLabel(ioa: number): string {
@@ -488,7 +481,6 @@ async function openAutoModal(row: PointSnapshot) {
   autoDialogIOA.value = row.ioa
   autoDialogPointName.value = row.name
   batchMode.value = false
-  batchApplyAll.value = false
   autoDialogVisible.value = true
 
   resetAutoForm()
@@ -512,7 +504,6 @@ function openBatchModal() {
   autoDialogIOA.value = 0
   autoDialogPointName.value = '批量配置'
   batchMode.value = true
-  batchApplyAll.value = false
   resetAutoForm()
   autoStrategyTab.value = 'increment'
   autoDialogVisible.value = true

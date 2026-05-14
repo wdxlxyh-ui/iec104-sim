@@ -173,13 +173,21 @@ func runServerMode() {
 }
 
 func (ws *webServer) registerRoutes(mux *http.ServeMux, configDir string) {
+	// Resolve web/dist relative to executable path, not CWD
+	exePath, _ := os.Executable()
+	webDir := filepath.Join(filepath.Dir(exePath), "web", "dist")
+
 	mux.HandleFunc("/api/v1/instances", ws.handleInstances)
 	mux.HandleFunc("/api/v1/instances/", ws.handleInstanceByID)
 	mux.HandleFunc("/api/v1/status", ws.handleStatus)
 	mux.HandleFunc("/api/v1/upload", ws.handleUpload)
 	mux.HandleFunc("/api/v1/files", ws.handleFiles)
 	// Serve static frontend if built
-	mux.Handle("/", http.FileServer(http.Dir("./web/dist")))
+	if _, err := os.Stat(webDir); err == nil {
+		mux.Handle("/", http.FileServer(http.Dir(webDir)))
+	} else {
+		slog.Warn("前端构建目录不存在，Web UI 不可用", "path", webDir)
+	}
 }
 
 // ─── Management API Handlers ───────────────────────────────────────────────

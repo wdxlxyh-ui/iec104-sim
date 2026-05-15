@@ -2,6 +2,8 @@ package detail
 
 import (
 	"encoding/csv"
+	"fmt"
+	"log/slog"
 	"math"
 	"math/rand"
 	"os"
@@ -40,6 +42,8 @@ func (sr *strategyRunner) runOnce(cfg *model.AutoChangeConfig, state *strategySt
 		sr.doSOC(cfg, state)
 	case model.StrategyEnergy:
 		sr.doEnergy(cfg, state)
+	case model.StrategyCustomFormula:
+		sr.doCustomFormula(cfg, state)
 	case model.StrategyManual:
 	}
 }
@@ -259,6 +263,149 @@ func (sr *strategyRunner) doEnergy(cfg *model.AutoChangeConfig, state *strategyS
 	}
 	sr.store.SetValue(cfg.PointIOA, state.currentEnergy)
 	sr.publisher.Publish(target)
+}
+
+func (sr *strategyRunner) doCustomFormula(cfg *model.AutoChangeConfig, state *strategyState) {
+	ioas := parseIOAList(cfg.Params.CustomIOAs)
+	if len(ioas) < 2 {
+		return
+	}
+	// Read all referenced point values
+	values := make(map[uint32]float64)
+	for _, ioa := range ioas {
+		if p, ok := sr.store.Get(ioa); ok {
+			values[ioa] = p.Value
+		} else {
+			return // referenced IOA not found, skip
+		}
+	}
+	// Replace {n} placeholders with actual values
+	formula := cfg.Params.CustomFormula
+	for idx, ioa := range ioas {
+		placeholder := fmt.Sprintf("{%d}", idx)
+		formula = strings.ReplaceAll(formula, placeholder, fmt.Sprintf("%f", values[ioa]))
+	}
+	result, err := evaluateExpression(formula)
+	if err != nil {
+		slog.Warn("自定义公式计算失败", "formula", formula, "error", err)
+		return
+	}
+	p, ok := sr.store.Get(cfg.PointIOA)
+	if !ok {
+		return
+	}
+	sr.store.SetValue(cfg.PointIOA, result)
+	sr.publisher.Publish(p)
+}
+
+// evaluateExpression evaluates a simple arithmetic expression with + - * / ( )
+func evaluateExpression(expr string) (float64, error) {
+	// Remove spaces
+	expr = strings.ReplaceAll(expr, " ", "")
+	if expr == "" {
+		return 0, fmt.Errorf("empty expression")
+	}
+	result, pos, err := parseExpr(expr, 0)
+	if err != nil {
+		return 0, err
+	}
+	if pos < len(expr) {
+		return 0, fmt.Errorf("unexpected character at position %d", pos)
+	}
+	return result, nil
+}
+
+func parseExpr(s string, pos int) (float64, int, error) {
+	left, pos, err := parseTerm(s, pos)
+	if err != nil {
+		return 0, pos, err
+	}
+	for pos < len(s) && (s[pos] == '+' || s[pos] == '-') {
+		op := s[pos]
+		pos++
+		right, newPos, err := parseTerm(s, pos)
+		if err != nil {
+			return 0, newPos, err
+		}
+		if op == '+' {
+			left += right
+		} else {
+			left -= right
+		}
+		pos = newPos
+	}
+	return left, pos, nil
+}
+
+func parseTerm(s string, pos int) (float64, int, error) {
+	left, pos, err := parseFactor(s, pos)
+	if err != nil {
+		return 0, pos, err
+	}
+	for pos < len(s) && (s[pos] == '*' || s[pos] == '/') {
+		op := s[pos]
+		pos++
+		right, newPos, err := parseFactor(s, pos)
+		if err != nil {
+			return 0, newPos, err
+		}
+		if op == '*' {
+			left *= right
+		} else {
+			if right == 0 {
+				return 0, newPos, fmt.Errorf("division by zero")
+			}
+			left /= right
+		}
+		pos = newPos
+	}
+	return left, pos, nil
+}
+
+func parseFactor(s string, pos int) (float64, int, error) {
+	if pos >= len(s) {
+		return 0, pos, fmt.Errorf("unexpected end of expression")
+	}
+	if s[pos] == '(' {
+		pos++ // skip '('
+		val, pos, err := parseExpr(s, pos)
+		if err != nil {
+			return 0, pos, err
+		}
+		if pos >= len(s) || s[pos] != ')' {
+			return 0, pos, fmt.Errorf("missing closing parenthesis")
+		}
+		pos++ // skip ')'
+		return val, pos, nil
+	}
+	// Parse number: [-]digits[.digits]
+	negative := false
+	if s[pos] == '-' {
+		negative = true
+		pos++
+	} else if s[pos] == '+' {
+		pos++
+	}
+	start := pos
+	for pos < len(s) && (isDigit(s[pos]) || s[pos] == '.') {
+		pos++
+	}
+	if pos == start {
+		return 0, pos, fmt.Errorf("expected number at position %d", start)
+	}
+	numStr := s[start:pos]
+	val, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, pos, fmt.Errorf("invalid number: %s", numStr)
+	}
+	if negative {
+		val = -val
+	}
+	return val, pos, nil
+}
+
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
 }
 
 func parseIOAList(s string) []uint32 {

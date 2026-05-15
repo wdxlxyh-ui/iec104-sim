@@ -121,29 +121,31 @@ export interface PointsResponse {
 }
 
 export interface StrategyParams {
-  start_value?: number
-  step?: number
-  period_ms?: number
-  max_value?: number
-  min_value?: number
-  max_value_r?: number
-  decimal_places?: number
-  csv_file?: string
-  time_format?: string
-  time_unit?: string
-  para_a?: string
-  para_b?: string
-  init_soc?: number
-  rated_cap?: number
-  power_ioa?: number
-  integral_ms?: number
-  init_energy?: number
-  stat_type?: number
-  energy_power_ioa?: number
-  energy_period_ms?: number
-  follow_ao_ioa?: number
-  api_init_value?: number
-}
+   start_value?: number
+   step?: number
+   period_ms?: number
+   max_value?: number
+   min_value?: number
+   max_value_r?: number
+   decimal_places?: number
+   csv_file?: string
+   time_format?: string
+   time_unit?: string
+   para_a?: string
+   para_b?: string
+   init_soc?: number
+   rated_cap?: number
+   power_ioa?: number
+   integral_ms?: number
+   init_energy?: number
+   stat_type?: number
+   energy_power_ioa?: number
+   energy_period_ms?: number
+   follow_ao_ioa?: number
+   api_init_value?: number
+   custom_ioas?: string
+   custom_formula?: string
+ }
 
 export interface AutoChangeConfig {
   ioa: number

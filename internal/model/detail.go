@@ -5,16 +5,17 @@ import "time"
 type StrategyType string
 
 const (
-	StrategyIncrement StrategyType = "increment"
-	StrategyRandom    StrategyType = "random"
-	StrategyCSV       StrategyType = "csv"
-	StrategyMax       StrategyType = "max"
-	StrategyMin       StrategyType = "min"
-	StrategySOC       StrategyType = "soc"
-	StrategyEnergy    StrategyType = "energy"
-	StrategyAOFollow  StrategyType = "aofollow"
-	StrategyAPIUpdate StrategyType = "apiupdate"
-	StrategyManual   StrategyType = "manual"
+	StrategyIncrement     StrategyType = "increment"
+	StrategyRandom        StrategyType = "random"
+	StrategyCSV           StrategyType = "csv"
+	StrategyMax           StrategyType = "max"
+	StrategyMin           StrategyType = "min"
+	StrategySOC           StrategyType = "soc"
+	StrategyEnergy        StrategyType = "energy"
+	StrategyAOFollow      StrategyType = "aofollow"
+	StrategyAPIUpdate     StrategyType = "apiupdate"
+	StrategyManual        StrategyType = "manual"
+	StrategyCustomFormula StrategyType = "custom"
 )
 
 type StrategyParams struct {
@@ -38,8 +39,10 @@ type StrategyParams struct {
 	StatType        int     `json:"stat_type,omitempty"`
 	EnergyPowerIOA  uint32  `json:"energy_power_ioa,omitempty"`
 	EnergyPeriodMs  int     `json:"energy_period_ms,omitempty"`
-	FollowAOIOA     uint32  `json:"follow_ao_ioa,omitempty"`
-	APIInitValue    float64 `json:"api_init_value,omitempty"`
+	FollowAOIOA      uint32  `json:"follow_ao_ioa,omitempty"`
+	APIInitValue     float64 `json:"api_init_value,omitempty"`
+	CustomIOAs       string  `json:"custom_ioas,omitempty"`
+	CustomFormula    string  `json:"custom_formula,omitempty"`
 }
 
 type AutoChangeConfig struct {

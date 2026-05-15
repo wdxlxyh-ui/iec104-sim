@@ -272,13 +272,91 @@
           </el-form>
           <div style="font-size: 12px; color: #999; margin-top: 8px">此模式仅能通过 HTTP API 更新值，其他方式拒绝写入</div>
         </el-tab-pane>
-        <el-tab-pane label="手动置数" name="manual">
-          <div style="padding: 20px; color: #999; font-size: 13px">
-            此模式下引擎不自动计算值<br/>
-            需通过 HTTP API 手动置数（PUT /api/v1/instances/{id}/points/{ioa}）<br/>
-            适用于外部系统联调场景
-          </div>
-        </el-tab-pane>
+<el-tab-pane label="手动置数" name="manual">
+           <div style="padding: 20px; color: #999; font-size: 13px">
+             此模式下引擎不自动计算值<br/>
+             需通过 HTTP API 手动置数（PUT /api/v1/instances/{id}/points/{ioa}）<br/>
+             适用于外部系统联调场景
+           </div>
+         </el-tab-pane>
+         <el-tab-pane label="自定义公式" name="custom">
+           <el-form label-width="100px" size="small">
+             <el-form-item label="关联测点">
+               <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px">
+                 <el-tag
+                   v-for="ioa in customSelectedIoas"
+                   :key="ioa"
+                   closable
+                   :type="customTagType(ioa)"
+                   @close="removeCustomIoa(ioa)"
+                 >
+                   {{ customIoaLabel(ioa) }}
+                 </el-tag>
+               </div>
+               <div style="display: flex; gap: 8px">
+                 <el-select
+                   v-model="customPointSearch"
+                   filterable
+                   remote
+                   reserve-keyword
+                   placeholder="搜索测点名称或IOA"
+                   :remote-method="queryCustomPoints"
+                   :loading="customPointLoading"
+                   style="width: 300px"
+                   @change="addCustomIoa"
+                 >
+                   <el-option
+                     v-for="pt in customPointOptions"
+                     :key="pt.ioa"
+                     :label="pt.name + ' (IOA: ' + pt.ioa + ')'"
+                     :value="pt.ioa"
+                   />
+                 </el-select>
+                 <el-button size="small" @click="clearCustomIoas">清空</el-button>
+               </div>
+               <div style="font-size: 12px; color: #999; margin-top: 4px">
+                 已选 {{ customSelectedIoas.length }} 个测点（最少2个，最多50个）
+               </div>
+             </el-form-item>
+             <el-form-item label="公式编辑">
+               <div style="border: 1px solid #dcdfe6; border-radius: 4px; padding: 8px; min-height: 80px">
+                 <div style="margin-bottom: 8px; min-height: 28px">
+                   <el-tag v-for="(token, idx) in customFormulaTokens" :key="idx" size="small" style="margin-right: 4px">
+                     {{ token }}
+                   </el-tag>
+                 </div>
+                 <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                   <el-button v-for="op in formulaOperators" :key="op" size="small" @click="appendFormulaToken(op)">
+                     {{ op }}
+                   </el-button>
+                   <el-button size="small" @click="appendFormulaToken('(')">(</el-button>
+                   <el-button size="small" @click="appendFormulaToken(')')">)</el-button>
+                   <el-button size="small" type="danger" plain @click="removeFormulaToken">退格</el-button>
+                   <el-button size="small" type="warning" plain @click="clearFormulaTokens">清空</el-button>
+                 </div>
+                 <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px">
+                   <el-button
+                     v-for="pt in customSelectedPoints"
+                     :key="pt.ioa"
+                     size="small"
+                     @click="appendFormulaToken('{' + getCustomIoaIndex(pt.ioa) + '}')"
+                   >
+                     {{ pt.name }}({{ pt.ioa }})
+                   </el-button>
+                 </div>
+               </div>
+               <div style="font-size: 12px; color: #999; margin-top: 4px">
+                 点击参数按钮插入如 {0}、{1} 等占位符，再点击运算符和括号构造公式
+               </div>
+             </el-form-item>
+             <el-form-item label="计算周期(ms)">
+               <el-input-number v-model="customForm.period_ms" :min="100" :step="100" style="width: 200px" />
+             </el-form-item>
+             <el-form-item label="公式预览">
+               <el-input :model-value="customFormulaPreview" disabled type="textarea" :rows="2" />
+             </el-form-item>
+           </el-form>
+         </el-tab-pane>
       </el-tabs>
 <template #footer>
          <div style="display: flex; justify-content: space-between; align-items: center">
@@ -353,6 +431,97 @@ const autoForm = reactive({
   follow_ao_ioa: 20,
   api_init_value: 0,
 })
+
+// ---- 自定义公式相关状态 ----
+const customSelectedIoas = ref<number[]>([])
+const customPointSearch = ref('')
+const customPointLoading = ref(false)
+const customPointOptions = ref<PointSnapshot[]>([])
+const customFormulaTokens = ref<string[]>([])
+const formulaOperators = ['+', '-', '*', '/']
+
+const customForm = reactive({
+  period_ms: 1000,
+})
+
+const customFormulaPreview = computed(() => {
+  return customFormulaTokens.value.join(' ')
+})
+
+const customSelectedPoints = computed(() => {
+  return customSelectedIoas.value.map(ioa => points.value.find(p => p.ioa === ioa)).filter(Boolean) as PointSnapshot[]
+})
+
+function customTagType(ioa: number): string {
+  const pt = points.value.find(p => p.ioa === ioa)
+  if (!pt) return ''
+  switch (pt.point_type) {
+    case 'AI': return 'primary'
+    case 'DI': return 'success'
+    case 'PI': return 'warning'
+    default: return 'info'
+  }
+}
+
+function customIoaLabel(ioa: number): string {
+  const pt = points.value.find(p => p.ioa === ioa)
+  return pt ? `${pt.name} (${ioa})` : String(ioa)
+}
+
+function getCustomIoaIndex(ioa: number): number {
+  return customSelectedIoas.value.indexOf(ioa)
+}
+
+function queryCustomPoints(query: string) {
+  if (!query) {
+    customPointOptions.value = []
+    return
+  }
+  customPointLoading.value = true
+  // 延迟搜索，避免频繁触发
+  setTimeout(() => {
+    const q = query.toLowerCase()
+    customPointOptions.value = points.value.filter(p =>
+      p.name.toLowerCase().includes(q) || String(p.ioa).includes(q)
+    )
+    customPointLoading.value = false
+  }, 200)
+}
+
+function addCustomIoa(ioa: number) {
+  if (customSelectedIoas.value.length >= 50) {
+    ElMessage.warning('最多只能关联 50 个测点')
+    return
+  }
+  if (!customSelectedIoas.value.includes(ioa)) {
+    customSelectedIoas.value.push(ioa)
+  }
+  customPointSearch.value = ''
+  customPointOptions.value = []
+}
+
+function removeCustomIoa(ioa: number) {
+  const idx = customSelectedIoas.value.indexOf(ioa)
+  if (idx >= 0) {
+    customSelectedIoas.value.splice(idx, 1)
+  }
+}
+
+function clearCustomIoas() {
+  customSelectedIoas.value = []
+}
+
+function appendFormulaToken(token: string) {
+  customFormulaTokens.value.push(token)
+}
+
+function removeFormulaToken() {
+  customFormulaTokens.value.pop()
+}
+
+function clearFormulaTokens() {
+  customFormulaTokens.value = []
+}
 
 function tagType(pt: string): string {
   switch (pt) {
@@ -490,6 +659,17 @@ async function openAutoModal(row: PointSnapshot) {
     if (cfg) {
       autoStrategyTab.value = cfg.strategy
       Object.assign(autoForm, cfg.params)
+      if (cfg.strategy === 'custom') {
+        if (cfg.params.custom_ioas) {
+          customSelectedIoas.value = cfg.params.custom_ioas.split(';').map(Number)
+        }
+        if (cfg.params.custom_formula) {
+          customFormulaTokens.value = cfg.params.custom_formula.split(' ').filter(t => t !== '')
+        }
+        if (cfg.params.period_ms) {
+          customForm.period_ms = cfg.params.period_ms
+        }
+      }
     }
   } catch {
     autoStrategyTab.value = 'increment'
@@ -510,16 +690,19 @@ function openBatchModal() {
 }
 
 function resetAutoForm() {
-  Object.assign(autoForm, {
-    start_value: 0, step: 1, period_ms: 1000, max_value: 100,
-    min_value: 0, max_value_r: 100, decimal_places: 0,
-    csv_file: '', time_format: 'absolute', time_unit: 'ms',
-    para_a: '', para_b: '',
-    init_soc: 50, rated_cap: 100, power_ioa: 16385, integral_ms: 1000,
-    init_energy: 0, stat_type: 0, energy_power_ioa: 16385, energy_period_ms: 1000,
-    follow_ao_ioa: 20, api_init_value: 0,
-  })
-}
+   Object.assign(autoForm, {
+     start_value: 0, step: 1, period_ms: 1000, max_value: 100,
+     min_value: 0, max_value_r: 100, decimal_places: 0,
+     csv_file: '', time_format: 'absolute', time_unit: 'ms',
+     para_a: '', para_b: '',
+     init_soc: 50, rated_cap: 100, power_ioa: 16385, integral_ms: 1000,
+     init_energy: 0, stat_type: 0, energy_power_ioa: 16385, energy_period_ms: 1000,
+     follow_ao_ioa: 20, api_init_value: 0,
+   })
+   customSelectedIoas.value = []
+   customFormulaTokens.value = []
+   customForm.period_ms = 1000
+ }
 
 async function confirmAutoChange() {
   const params: any = {}
@@ -560,15 +743,20 @@ async function confirmAutoChange() {
       params.energy_power_ioa = autoForm.energy_power_ioa
       params.energy_period_ms = autoForm.energy_period_ms
       break
-    case 'aofollow':
-      params.follow_ao_ioa = autoForm.follow_ao_ioa
-      break
-    case 'apiupdate':
-      params.api_init_value = autoForm.api_init_value
-      break
-    case 'manual':
-      break
-  }
+case 'aofollow':
+       params.follow_ao_ioa = autoForm.follow_ao_ioa
+       break
+     case 'apiupdate':
+       params.api_init_value = autoForm.api_init_value
+       break
+     case 'manual':
+       break
+     case 'custom':
+       params.custom_ioas = customSelectedIoas.value.join(';')
+       params.custom_formula = customFormulaPreview.value
+       params.period_ms = customForm.period_ms
+       break
+   }
 
   if (params.period_ms && params.period_ms < 100) {
     ElMessage.error('变化周期不能小于 100ms')

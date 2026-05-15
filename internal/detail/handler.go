@@ -372,6 +372,22 @@ func (h *DetailHandler) putAutoChange(w http.ResponseWriter, r *http.Request, io
 		return
 	}
 
+	if model.StrategyType(req.Strategy) == model.StrategyCustomFormula {
+		ioas := parseIOAList(req.Params.CustomIOAs)
+		if len(ioas) < 2 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "custom formula requires at least 2 associated IOAs"})
+			return
+		}
+		if len(ioas) > 50 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "custom formula supports at most 50 associated IOAs"})
+			return
+		}
+		if req.Params.CustomFormula == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "custom formula cannot be empty"})
+			return
+		}
+	}
+
 	cfg := &model.AutoChangeConfig{
 		PointIOA:  ioa,
 		Strategy:  model.StrategyType(req.Strategy),
@@ -775,6 +791,8 @@ func paramsToABCDEFG(strategy model.StrategyType, p *model.StrategyParams) (a, b
 		return strconv.FormatUint(uint64(p.FollowAOIOA), 10), "", "", "", "", "", ""
 	case model.StrategyAPIUpdate:
 		return floatToStr(p.APIInitValue), "", "", "", "", "", ""
+	case model.StrategyCustomFormula:
+		return p.CustomIOAs, p.CustomFormula, strconv.Itoa(p.PeriodMs), "", "", "", ""
 	}
 	return "", "", "", "", "", "", ""
 }
@@ -824,6 +842,10 @@ func abcdefgToParams(strategy model.StrategyType, a, b, c, d, e, f, g string) mo
 		p.FollowAOIOA = parseUint32Col(a)
 	case model.StrategyAPIUpdate:
 		p.APIInitValue = parseFloatCol(a)
+	case model.StrategyCustomFormula:
+		p.CustomIOAs = strings.TrimSpace(a)
+		p.CustomFormula = strings.TrimSpace(b)
+		p.PeriodMs = parseIntCol(c)
 	}
 	return p
 }

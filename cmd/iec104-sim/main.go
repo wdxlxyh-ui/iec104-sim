@@ -16,7 +16,6 @@ import (
 
 	"strconv"
 
-	"iec104-sim/internal/auth"
 	"iec104-sim/internal/detail"
 	"iec104-sim/internal/manager"
 	"iec104-sim/internal/model"
@@ -146,15 +145,10 @@ func runServerMode() {
 
 	mgr := manager.New(cfgStore, configDir)
 
-	// Init auth
-	authStore := auth.NewUserStore(filepath.Join(configDir, "users.json"))
-	authHandler := auth.NewAuthHandler(authStore)
-
 	// Build HTTP mux
 	mux := http.NewServeMux()
 	ws := &webServer{mgr: mgr, cfgDir: configDir}
 	ws.registerRoutes(mux, configDir)
-	authHandler.Register(mux)
 
 	if p := parsePort(httpAddr); p > 0 {
 		firewall.EnsurePort(p, "iec104-sim-http")

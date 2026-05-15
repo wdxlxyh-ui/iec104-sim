@@ -1,29 +1,29 @@
 [
   {
-    "id": "3aacdf00329d",
-    "name": "储能-01",
-    "iec104_port": 5001,
-    "xlsx_file": "固定验证-储能.xlsx",
-    "enabled": false,
+    "id": "c77290552470",
+    "name": "test-instance",
+    "iec104_port": 24041,
+    "xlsx_file": "samples/point.xlsx",
+    "enabled": true,
     "http_enabled": true,
-    "http_port": 6001
+    "http_port": 2405
   },
   {
-    "id": "55cc6c7355d4",
-    "name": "光伏",
-    "iec104_port": 5002,
-    "xlsx_file": "固定验证-光伏.xlsx",
+    "id": "0a93a32b310d",
+    "name": "E",
+    "iec104_port": 4444,
+    "xlsx_file": "point.xlsx",
     "enabled": false,
     "http_enabled": true,
-    "http_port": 6002
+    "http_port": 4445
   },
   {
-    "id": "fd957a775d36",
-    "name": "关口表",
-    "iec104_port": 5005,
-    "xlsx_file": "固定验证-关口表.xlsx",
+    "id": "d7b403a205db",
+    "name": "R",
+    "iec104_port": 5555,
+    "xlsx_file": "point.xlsx",
     "enabled": false,
     "http_enabled": true,
-    "http_port": 6005
+    "http_port": 6688
   }
 ]

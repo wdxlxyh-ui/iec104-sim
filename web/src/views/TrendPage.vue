@@ -2,11 +2,10 @@
   <div>
     <!-- Description -->
     <el-card shadow="never" style="margin-bottom: 16px">
-      <div style="font-size: 13px; color: #94a3b8; line-height: 1.8">
-        选取多个实例的测点，放在同一张图上对比趋势。
-        每 5 秒轮询一次，最长保留 1 小时数据。
+      <div style="font-size: 13px; color: #94a3b8; line-height: 1.8" :style="{color: 'var(--text-secondary)'}">
+        {{ t('trend_desc') }}
         <span v-if="traces.length === 0" style="color: #f59e0b">
-          请先添加测点开始监控。
+          {{ t('trend_no_data') }}
         </span>
       </div>
     </el-card>
@@ -14,9 +13,9 @@
     <!-- Selected points -->
     <el-card shadow="never" style="margin-bottom: 16px">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
-        <span style="font-size: 14px; font-weight: 500">已选测点</span>
-        <span style="font-size: 12px; color: #94a3b8">
-          {{ traces.length }} / 8 条线
+        <span style="font-size: 14px; font-weight: 500">{{ t('trend_selected') }}</span>
+        <span style="font-size: 12px; color: var(--text-secondary)">
+          {{ traces.length }} / 8 {{ t('trend_lines') }}
         </span>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 8px">
@@ -31,7 +30,7 @@
         >
           {{ t.inst }} · {{ t.alias || t.name || 'IOA:' + t.ioa }}
         </el-tag>
-        <el-button size="small" @click="openDialog">+ 添加测点</el-button>
+        <el-button size="small" @click="openDialog">{{ t('trend_add') }}</el-button>
       </div>
     </el-card>
 
@@ -159,6 +158,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listInstances, getPoints, readPoint, type PointSnapshot } from '../api'
+import { useI18n } from '../composables/useI18n'
+const { t } = useI18n()
 
 const COLORS = ['#14b8a6', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#22d3ee', '#f97316', '#8b5cf6']
 

@@ -37,11 +37,16 @@ web-build:
 		echo "web/ directory not found, skipping frontend build"; \
 	fi
 
-# ── 完整构建 (含前端) ───────────────────────────────────
-build-full: web-build build-linux-amd64
+# ── MCP Server 构建 ────────────────────────────────────
+build-mcp:
+	go build $(LDFLAGS) -o $(BIN_DIR)/mcp-server ./cmd/mcp-server/
+	@echo "  ✔ mcp-server built"
+
+# ── 完整构建 (含前端 + MCP) ────────────────────────────
+build-full: web-build build-linux-amd64 build-mcp
 
 # ── 三平台全部打包 tar.gz/zip ──────────────────────────
-dist: web-build build-all
+dist: web-build build-all build-mcp
 	@echo ""
 	@echo "=== 打包三平台发行包 ==="
 	@echo ""
@@ -51,6 +56,7 @@ dist: web-build build-all
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources
 	cp $(BIN_DIR)/$(PROJECT) $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/$(PROJECT)
+	cp $(BIN_DIR)/mcp-server $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/mcp-server
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/*.sh
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/instances.json

@@ -92,6 +92,10 @@ func (c *SimulatorClient) ConfigAutoChange(instID string, ioa uint32, body json.
 	return c.put(fmt.Sprintf("/api/v1/instances/%s/points/auto-change/%d", instID, ioa), body)
 }
 
+func (c *SimulatorClient) BatchAutoChange(instID string, body json.RawMessage) (json.RawMessage, error) {
+	return c.put(fmt.Sprintf("/api/v1/instances/%s/points/auto-change/batch", instID), body)
+}
+
 func (c *SimulatorClient) DeleteAutoChange(instID string, ioa uint32) (json.RawMessage, error) {
 	return c.delete(fmt.Sprintf("/api/v1/instances/%s/points/auto-change/%d", instID, ioa))
 }
@@ -232,6 +236,20 @@ func getUint32Arg(args map[string]any, key string) uint32 {
 		return uint32(n)
 	}
 	return 0
+}
+
+func getFloat64Array(args map[string]any, key string) []float64 {
+	v, _ := args[key].([]any)
+	if v == nil {
+		return nil
+	}
+	res := make([]float64, 0, len(v))
+	for _, item := range v {
+		if f, ok := item.(float64); ok {
+			res = append(res, f)
+		}
+	}
+	return res
 }
 
 func getStringArray(args map[string]any, key string) []string {

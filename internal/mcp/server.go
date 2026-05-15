@@ -131,7 +131,7 @@ func NewDataInterfaceServer(client *SimulatorClient) *server.MCPServer {
 		if err != nil {
 			return nil, err
 		}
-		ioas := getStringArray(args, "ioas")
+		ioas := getFloat64Array(args, "ioas")
 		if len(ioas) == 0 {
 			return raw, nil
 		}
@@ -142,14 +142,14 @@ func NewDataInterfaceServer(client *SimulatorClient) *server.MCPServer {
 		if err := json.Unmarshal(raw, &allPoints); err != nil {
 			return nil, err
 		}
-		ioaSet := make(map[string]bool, len(ioas))
+		ioaSet := make(map[float64]bool, len(ioas))
 		for _, ioa := range ioas {
 			ioaSet[ioa] = true
 		}
 		filtered := make([]map[string]any, 0)
 		for _, p := range allPoints.Points {
-			ioaStr := fmt.Sprintf("%v", p["ioa"])
-			if ioaSet[ioaStr] {
+			ioaFloat, ok := p["ioa"].(float64)
+			if ok && ioaSet[ioaFloat] {
 				filtered = append(filtered, p)
 			}
 		}
@@ -301,6 +301,28 @@ func NewDataInterfaceServer(client *SimulatorClient) *server.MCPServer {
 		mcp.WithString("csv_content", mcp.Description("CSV 文件内容")),
 	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
 		return c.UploadCSV(getStringArg(args, "instance_id"), getStringArg(args, "csv_content"))
+	}))
+
+	// batch_auto_change
+	s.AddTool(mcp.NewTool("batch_auto_change",
+		mcp.WithDescription("批量配置多个测点的自动变化策略。传入数组，每个元素包含 ioa, strategy, enabled, params。"),
+		mcp.WithString("instance_id", mcp.Description("实例ID")),
+		mcp.WithString("configs", mcp.Description("批量配置 JSON 数组字符串，如 [{\"ioa\":16385,\"strategy\":\"increment\",\"enabled\":true,\"params\":{\"start_value\":0,\"step\":1,\"period_ms\":1000,\"max_value\":100}}]")),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		instID := getStringArg(args, "instance_id")
+		configsStr := getStringArg(args, "configs")
+		if configsStr == "" {
+			return nil, fmt.Errorf("configs is required")
+		}
+		return c.BatchAutoChange(instID, json.RawMessage(configsStr))
+	}))
+
+	// export_points_csv
+	s.AddTool(mcp.NewTool("export_points_csv",
+		mcp.WithDescription("导出实例的测点数据为 CSV 格式"),
+		mcp.WithString("instance_id", mcp.Description("实例ID")),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		return c.ExportPointsCSV(getStringArg(args, "instance_id"))
 	}))
 
 	return s

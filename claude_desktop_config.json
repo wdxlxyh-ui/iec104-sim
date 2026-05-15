@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "iec104-simulator": {
+      "command": "/path/to/bin/mcp-server",
+      "args": [
+        "--mode", "both",
+        "--simulator", "http://localhost:8989"
+      ]
+    }
+  }
+}

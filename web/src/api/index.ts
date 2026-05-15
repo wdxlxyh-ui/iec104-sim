@@ -169,6 +169,11 @@ export async function getPoints(instanceId: string): Promise<PointsResponse> {
   return res.data
 }
 
+export async function readPoint(instanceId: string, ioa: number): Promise<PointSnapshot> {
+  const res = await http.get(`/instances/${instanceId}/points/${ioa}`)
+  return res.data
+}
+
 export async function setPointValue(instanceId: string, ioa: number, value: any): Promise<any> {
   const res = await http.put(`/instances/${instanceId}/points/${ioa}`, value)
   return res.data

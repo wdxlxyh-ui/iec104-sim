@@ -17,6 +17,10 @@
             <el-icon><Monitor /></el-icon>
             <span>运行监控</span>
           </el-menu-item>
+          <el-menu-item index="/trend">
+            <el-icon><DataLine /></el-icon>
+            <span>实时趋势</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
       <el-main class="app-main">
@@ -33,7 +37,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting, Monitor } from '@element-plus/icons-vue'
+import { Setting, Monitor, DataLine } from '@element-plus/icons-vue'
 import { getStatus, type GlobalStatus } from './api'
 
 const route = useRoute()

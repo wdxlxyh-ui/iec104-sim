@@ -13,17 +13,32 @@ import (
 	"time"
 
 	"iec104-sim/internal/model"
+	"iec104-sim/pkg/config"
 	"iec104-sim/pkg/library"
 )
+
+type resolvedIOA struct {
+	InstanceID string
+	IOA        uint32
+	RawKey     string
+}
 
 type strategyRunner struct {
 	store      *library.Store
 	publisher  publisher
 	configDir  string
+	instanceID string
+	provider   StoreProvider
 }
 
-func newStrategyRunner(store *library.Store, pub publisher, cfgDir string) *strategyRunner {
-	return &strategyRunner{store: store, publisher: pub, configDir: cfgDir}
+func newStrategyRunner(store *library.Store, pub publisher, cfgDir, instanceID string, provider StoreProvider) *strategyRunner {
+	return &strategyRunner{
+		store:      store,
+		publisher:  pub,
+		configDir:  cfgDir,
+		instanceID: instanceID,
+		provider:   provider,
+	}
 }
 
 func (sr *strategyRunner) runOnce(cfg *model.AutoChangeConfig, state *strategyState) {
@@ -266,25 +281,52 @@ func (sr *strategyRunner) doEnergy(cfg *model.AutoChangeConfig, state *strategyS
 }
 
 func (sr *strategyRunner) doCustomFormula(cfg *model.AutoChangeConfig, state *strategyState) {
-	ioas := parseIOAList(cfg.Params.CustomIOAs)
+	ioas := parseCrossIOAList(cfg.Params.CustomIOAs)
 	if len(ioas) < 2 {
+		slog.Warn("自定义公式: 关联测点不足2个，跳过", "ioa", cfg.PointIOA)
 		return
 	}
-	// Read all referenced point values
-	values := make(map[uint32]float64)
-	for _, ioa := range ioas {
-		if p, ok := sr.store.Get(ioa); ok {
-			values[ioa] = p.Value
+
+	// Collect all values from local and cross-instance stores
+	values := make(map[string]float64)
+	hasFailure := false
+
+	for _, ri := range ioas {
+		var p *config.Point
+		var ok bool
+
+		if ri.InstanceID == "" || ri.InstanceID == sr.instanceID {
+			p, ok = sr.store.Get(ri.IOA)
 		} else {
-			return // referenced IOA not found, skip
+			remoteStore := sr.provider.GetStore(ri.InstanceID)
+			if remoteStore != nil {
+				p, ok = remoteStore.Get(ri.IOA)
+			} else {
+				slog.Warn("自定义公式: 跨实例Store不可用",
+					"targetIOA", cfg.PointIOA,
+					"remoteInstance", ri.InstanceID,
+					"remoteIOA", ri.IOA)
+			}
 		}
+		if !ok {
+			slog.Warn("自定义公式: 测点不可用，跳过本次计算",
+				"targetIOA", cfg.PointIOA,
+				"ref", ri.RawKey)
+			hasFailure = true
+			break
+		}
+		values[ri.RawKey] = p.Value
 	}
-	// Replace {n} placeholders with actual values
+	if hasFailure {
+		return
+	}
+
 	formula := cfg.Params.CustomFormula
-	for idx, ioa := range ioas {
+	for idx, ri := range ioas {
 		placeholder := fmt.Sprintf("{%d}", idx)
-		formula = strings.ReplaceAll(formula, placeholder, fmt.Sprintf("%f", values[ioa]))
+		formula = strings.ReplaceAll(formula, placeholder, fmt.Sprintf("%f", values[ri.RawKey]))
 	}
+
 	result, err := evaluateExpression(formula)
 	if err != nil {
 		slog.Warn("自定义公式计算失败", "formula", formula, "error", err)
@@ -296,6 +338,44 @@ func (sr *strategyRunner) doCustomFormula(cfg *model.AutoChangeConfig, state *st
 	}
 	sr.store.SetValue(cfg.PointIOA, result)
 	sr.publisher.Publish(p)
+}
+
+// parseCrossIOAList 解析跨实例测点列表。
+// 格式: "16385;inst-abc:30001;inst-def:40005"
+// 本实例用 "" 表示（空 instanceID），如 "16385"。
+func parseCrossIOAList(s string) []resolvedIOA {
+	parts := strings.Split(s, ";")
+	var result []resolvedIOA
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if idx := strings.Index(p, ":"); idx > 0 {
+			instID := p[:idx]
+			ioaStr := p[idx+1:]
+			ioa, err := strconv.ParseUint(strings.TrimSpace(ioaStr), 10, 32)
+			if err != nil || ioa == 0 {
+				continue
+			}
+			result = append(result, resolvedIOA{
+				InstanceID: instID,
+				IOA:        uint32(ioa),
+				RawKey:     p,
+			})
+		} else {
+			ioa, err := strconv.ParseUint(p, 10, 32)
+			if err != nil || ioa == 0 {
+				continue
+			}
+			result = append(result, resolvedIOA{
+				InstanceID: "",
+				IOA:        uint32(ioa),
+				RawKey:     p,
+			})
+		}
+	}
+	return result
 }
 
 // evaluateExpression evaluates a simple arithmetic expression with + - * / ( )

@@ -158,7 +158,7 @@ func (m *Manager) StartInstance(id string) error {
 	}
 
 	acStore := detail.NewAutoChangeStore(m.cfgDir)
-	engine := detail.NewEngine(cfg.ID, store, server, acStore, m.cfgDir)
+	engine := detail.NewEngine(cfg.ID, store, server, acStore, m.cfgDir, m)
 	server.SetAOFollowHandler(engine.HandleAOFollow)
 	if err := engine.LoadAndStart(); err != nil {
 		slog.Warn("自动变化引擎加载失败", "id", id, "error", err)

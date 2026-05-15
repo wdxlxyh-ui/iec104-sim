@@ -33,11 +33,11 @@ type changeTask struct {
 	done   chan struct{}
 }
 
-func NewEngine(instanceID string, store *library.Store, pub publisher, acStore *AutoChangeStore, cfgDir string) *Engine {
+func NewEngine(instanceID string, store *library.Store, pub publisher, acStore *AutoChangeStore, cfgDir string, provider StoreProvider) *Engine {
 	return &Engine{
 		store:      store,
 		pub:        pub,
-		strategy:   newStrategyRunner(store, pub, cfgDir),
+		strategy:   newStrategyRunner(store, pub, cfgDir, instanceID, provider),
 		acStore:    acStore,
 		tasks:      make(map[uint32]*changeTask),
 		state:      make(map[uint32]*strategyState),

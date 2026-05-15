@@ -25,8 +25,21 @@ build-windows:
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 		go build $(LDFLAGS) -o $(BIN_DIR)/$(PROJECT).exe ./cmd/iec104-sim/
 
+# ── MCP Server (stdio 协议, 供 AI Agent 调用) ───────────
+build-mcp-linux-amd64:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+		go build $(LDFLAGS) -o $(BIN_DIR)/iec104-mcp ./cmd/mcp-server/
+
+build-mcp-linux-arm64:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+		go build $(LDFLAGS) -o $(BIN_DIR)/iec104-mcp-arm64 ./cmd/mcp-server/
+
+build-mcp-windows:
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+		go build $(LDFLAGS) -o $(BIN_DIR)/iec104-mcp.exe ./cmd/mcp-server/
+
 # ── 全部二进制 ──────────────────────────────────────────
-build-all: build-linux-amd64 build-linux-arm64 build-windows
+build-all: build-linux-amd64 build-linux-arm64 build-windows build-mcp-linux-amd64 build-mcp-linux-arm64 build-mcp-windows
 	@echo "  ✔ all binaries built"
 
 # ── Web 前端构建 (需要 Node.js) ─────────────────────────
@@ -51,6 +64,7 @@ dist: web-build build-all
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources
 	cp $(BIN_DIR)/$(PROJECT) $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/$(PROJECT)
+	cp $(BIN_DIR)/iec104-mcp $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/iec104-mcp
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/*.sh
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/instances.json
@@ -69,6 +83,7 @@ dist: web-build build-all
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/logs
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/resources
 	cp $(BIN_DIR)/$(PROJECT)-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/$(PROJECT)
+	cp $(BIN_DIR)/iec104-mcp-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/iec104-mcp
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/*.sh
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config/instances.json
@@ -88,6 +103,7 @@ dist: web-build build-all
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/logs
 	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/resources
 	cp $(BIN_DIR)/$(PROJECT).exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/$(PROJECT).exe
+	cp $(BIN_DIR)/iec104-mcp.exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/iec104-mcp.exe
 	cp scripts/start.bat scripts/stop.bat scripts/restart.bat $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/scripts/
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/config/instances.json
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/logs/.gitkeep

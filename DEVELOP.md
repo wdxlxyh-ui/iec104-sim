@@ -23,6 +23,7 @@
 iec104-sim-v{version}-linux-amd64/
 ├── bin/
 │   ├── iec104-sim            ← 二进制（amd64 无后缀）
+│   ├── iec104-mcp            ← MCP Server（stdio协议，供AI Agent调用）
 │   ├── start.sh
 │   ├── stop.sh
 │   └── restart.sh

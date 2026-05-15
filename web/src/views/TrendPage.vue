@@ -57,44 +57,53 @@
         <div>点击上方「+ 添加测点」选择要跟踪的数据</div>
       </div>
 
-      <div v-else ref="chartRef" style="width: 100%">
-        <svg :viewBox="`0 0 ${SVG_W} ${SVG_H}`" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: auto; display: block">
-          <!-- Grid lines -->
+      <div v-else ref="chartRef" style="width: 100%; position: relative">
+        <!-- Tooltip -->
+        <div v-show="tooltip.show" :style="tooltip.style" style="position: absolute; z-index: 10; pointer-events: none;
+          background: #1a1f2e; border: 1px solid #334155; border-radius: 6px; padding: 10px 14px; font-size: 12px;
+          min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);">
+          <div style="color: #94a3b8; margin-bottom: 6px; font-size: 11px">{{ tooltip.time }}</div>
+          <div v-for="(v, i) in tooltip.vals" :key="i"
+            style="display: flex; justify-content: space-between; gap: 16px; padding: 2px 0">
+            <span style="color: #94a3b8; white-space: nowrap">
+              <span :style="{ display:'inline-block', width:'8px', height:'2px', background:COLORS[i%COLORS.length], marginRight:'6px', verticalAlign:'middle' }"></span>
+              {{ v.name }}
+            </span>
+            <span style="font-family: monospace; font-weight: 600" :style="{ color: COLORS[i % COLORS.length] }">{{ v.val }}</span>
+          </div>
+        </div>
+
+        <svg :viewBox="`0 0 ${SVG_W} ${SVG_H}`" preserveAspectRatio="xMidYMid meet"
+          style="width: 100%; height: auto; display: block"
+          @mousemove="onSvgMove" @mouseleave="tooltip.show = false">
           <line v-for="i in 6" :key="'g'+i"
             :x1="padL" :y1="padT + chartH - (i/6)*chartH"
             :x2="padL + chartW" :y2="padT + chartH - (i/6)*chartH"
             stroke="#1e293b" stroke-width="0.5" />
-          <!-- Y labels -->
           <text v-for="i in 6" :key="'yl'+i"
             :x="padL - 6" :y="padT + chartH - (i/6)*chartH + 3"
             text-anchor="end" font-size="10" font-family="monospace" fill="#475569"
           >{{ yLabel(i/6) }}</text>
-          <!-- Axes -->
           <line :x1="padL" :y1="padT" :x2="padL" :y2="padT+chartH" stroke="#1e293b" stroke-width="1" />
           <line :x1="padL" :y1="padT+chartH" :x2="padL+chartW" :y2="padT+chartH" stroke="#1e293b" stroke-width="1" />
-          <!-- X labels -->
           <text v-for="i in 5" :key="'xl'+i"
             :x="padL + (i/5)*chartW" :y="padT + chartH + 16"
             text-anchor="middle" font-size="10" font-family="monospace" fill="#475569"
           >{{ xLabel(i/5) }}</text>
-          <!-- Data lines with gradient fill -->
           <template v-for="(t, vi) in visibleTraces" :key="'trace'+vi">
-            <!-- Gradient fill area -->
-            <path
-              :d="areaPath(t, vi)"
-              :fill="`url(#grad-${t.colorIdx % COLORS.length})`"
-              opacity="0.15"
-            />
-            <!-- Line -->
-            <path
-              :d="smoothPath(t, vi)"
-              :stroke="COLORS[t.colorIdx % COLORS.length]"
-              fill="none"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-              stroke-linecap="round"
-            />
+            <path :d="areaPath(t)" :fill="`url(#grad-${t.colorIdx % COLORS.length})`" opacity="0.15" />
+            <polyline :points="polylinePoints(t)" :stroke="COLORS[t.colorIdx % COLORS.length]"
+              fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
           </template>
+          <rect :x="padL" y="0" :width="chartW" :height="SVG_H" fill="transparent"
+            @mousemove="onSvgMove" @mouseleave="tooltip.show = false" />
+          <!-- Gradient defs -->
+          <defs>
+            <linearGradient v-for="(c, i) in COLORS" :key="'lg'+i" :id="'grad-'+i" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" :stop-color="c" stop-opacity="0.3"/>
+              <stop offset="100%" :stop-color="c" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
         </svg>
 
         <!-- SVG gradient defs -->
@@ -151,225 +160,78 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listInstances, getPoints, readPoint, type PointSnapshot } from '../api'
 
-const COLORS = ['#14b8a6', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#22d3ee', '#f97316', '#8b5cf6']
+const COLORS = ['#14b8a6','#f59e0b','#3b82f6','#a855f7','#ec4899','#22d3ee','#f97316','#8b5cf6']
 
-interface Trace {
-  instId: string
-  inst: string
-  ioa: number
-  name: string
-  unit: string
-  alias: string
-  colorIdx: number
-  data: number[]
-}
+interface Trace { instId:string; inst:string; ioa:number; name:string; unit:string; alias:string; colorIdx:number; data:number[] }
 
-// Chart constants
-const SVG_W = 700
-const SVG_H = 280
-const padL = 50
-const padT = 20
-const chartW = SVG_W - padL - 20
-const chartH = SVG_H - padT - 36
+const SVG_W=700, SVG_H=280, padL=50, padT=20, chartW=SVG_W-padL-20, chartH=SVG_H-padT-36
 
-// State
 const traces = ref<Trace[]>([])
 const hiddenTraces = ref<Set<number>>(new Set())
 const timeRange = ref(15)
 const lastUpdate = ref('--')
 const pointsCount = ref(0)
 const dialogVisible = ref(false)
-const allInstances = ref<{ id: string; name: string }[]>([])
-const formInst = ref('')
-const formIoa = ref<number | null>(null)
-const formAlias = ref('')
-const formPoints = ref<PointSnapshot[]>([])
-let pollTimer: ReturnType<typeof setInterval> | null = null
+const allInstances = ref<{id:string;name:string}[]>([])
+const formInst = ref(''); const formIoa = ref<number|null>(null)
+const formAlias = ref(''); const formPoints = ref<PointSnapshot[]>([])
+let pollTimer: ReturnType<typeof setInterval>|null = null
 
-const visibleTraces = computed(() => traces.value.filter((_, i) => !hiddenTraces.value.has(i)))
+// Tooltip state
+const tooltip = reactive({ show:false, style:{left:'0px',top:'0px'}, time:'', vals:[] as {name:string;val:string}[] })
 
-// SVG helpers
-function yLabel(ratio: number): string {
-  const all: number[] = []
-  visibleTraces.value.forEach(t => {
-    const sl = sliceData(t)
-    all.push(...sl)
-  })
-  if (all.length === 0) return '0'
-  const min = Math.min(...all)
-  const max = Math.max(...all)
-  const range = max - min || 1
-  return ((min + ratio * range)).toFixed(1)
+const visibleTraces = computed(() => traces.value.filter((_,i)=>!hiddenTraces.value.has(i)))
+
+function chartBounds() {
+  const all:number[]=[]; visibleTraces.value.forEach(t=>all.push(...sliceData(t)))
+  if(!all.length) return {min:0,max:1,range:1}
+  const min=Math.min(...all),max=Math.max(...all),range=max-min||1
+  return {min,max,range}
 }
 
-function xLabel(ratio: number): string {
-  const d = new Date(Date.now() - timeRange.value * 60 * 1000 * (1 - ratio))
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+function yLabel(r:number):string{const b=chartBounds();return(b.min+r*b.range).toFixed(1)}
+function xLabel(r:number):string{const d=new Date(Date.now()-timeRange.value*60*1000*(1-r));return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
+function sliceData(t:Trace):number[]{const n=Math.floor(timeRange.value*60/5);return t.data.slice(-n)}
+
+function polylinePoints(t:Trace):string{
+  const sl=sliceData(t);if(sl.length<2)return''
+  const b=chartBounds(),step=chartW/(sl.length-1)
+  return sl.map((v,i)=>{const x=padL+i*step,y=padT+chartH-((v-b.min)/b.range)*chartH;return`${x},${y}`}).join(' ')
 }
 
-function sliceData(t: Trace): number[] {
-  const maxPts = Math.floor(timeRange.value * 60 / 5)
-  return t.data.slice(-maxPts)
+function areaPath(t:Trace):string{
+  const pts=polylinePoints(t);if(!pts)return''
+  const firstX=pts.split(',')[0],segs=pts.split(' '),lastX=segs[segs.length-1].split(',')[0]
+  return`M${firstX},${padT+chartH} L${pts} L${lastX},${padT+chartH} Z`
 }
 
-function linePoints(t: Trace, vi: number): string {
-  const sl = sliceData(t)
-  if (sl.length < 2) return ''
-  const all: number[] = []
-  visibleTraces.value.forEach(t => { all.push(...sliceData(t)) })
-  if (all.length === 0) return ''
-  const min = Math.min(...all)
-  const max = Math.max(...all)
-  const range = max - min || 1
-  const step = chartW / (sl.length - 1)
-  return sl.map((v, i) => {
-    const x = padL + i * step
-    const y = padT + chartH - ((v - min) / range) * chartH
-    return `${x},${y}`
-  }).join(' ')
+function onSvgMove(e:MouseEvent){
+  const svg=e.currentTarget as SVGElement,rect=svg.getBoundingClientRect()
+  const mx=(e.clientX-rect.left)*(SVG_W/rect.width)
+  if(mx<padL||mx>padL+chartW){tooltip.show=false;return}
+  const maxPts=Math.floor(timeRange.value*60/5),step=chartW/(Math.max(maxPts,1)-1)
+  const idx=Math.min(Math.round((mx-padL)/step),maxPts-1)
+  if(idx<0){tooltip.show=false;return}
+  const ptTime=new Date(Date.now()-(maxPts-1-idx)*(timeRange.value*60*1000/maxPts))
+  const vals:{name:string;val:string}[]=[]
+  visibleTraces.value.forEach(t=>{const s=sliceData(t);if(idx<s.length)vals.push({name:`${t.inst}·${t.alias||t.name}`,val:s[idx].toFixed(1)})})
+  const p=svg.parentElement;if(p){const cr=p.getBoundingClientRect(),rx=e.clientX-cr.left+12,ry=e.clientY-cr.top-10;tooltip.style={left:`${Math.min(rx,cr.width-180)}px`,top:`${ry}px`}}
+  tooltip.time=ptTime.toLocaleTimeString();tooltip.vals=vals;tooltip.show=true
 }
 
-function smoothPath(t: Trace, vi: number): string {
-  const sl = sliceData(t)
-  if (sl.length < 2) return ''
-  const all: number[] = []
-  visibleTraces.value.forEach(t => { all.push(...sliceData(t)) })
-  if (all.length === 0) return ''
-  const min = Math.min(...all)
-  const max = Math.max(...all)
-  const range = max - min || 1
-  const step = chartW / (sl.length - 1)
+function lastValue(t:Trace):string{return t.data.length>0?t.data[t.data.length-1].toFixed(1):'--'}
+function toggleTrace(i:number){const s=new Set(hiddenTraces.value);if(s.has(i))s.delete(i);else s.add(i);hiddenTraces.value=s}
+function removeTrace(i:number){traces.value.splice(i,1);hiddenTraces.value=new Set()}
 
-  // Build smooth cubic bezier path
-  const pts = sl.map((v, i) => ({
-    x: padL + i * step,
-    y: padT + chartH - ((v - min) / range) * chartH,
-  }))
-
-  if (pts.length < 2) return ''
-  let d = `M${pts[0].x},${pts[0].y}`
-
-  for (let i = 1; i < pts.length; i++) {
-    const p0 = pts[i - 1]
-    const p1 = pts[i]
-    const cp1x = p0.x + (p1.x - p0.x) / 3
-    const cp1y = p0.y
-    const cp2x = p1.x - (p1.x - p0.x) / 3
-    const cp2y = p1.y
-    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p1.x},${p1.y}`
-  }
-  return d
-}
-
-function areaPath(t: Trace, vi: number): string {
-  const sl = sliceData(t)
-  if (sl.length < 2) return ''
-  const all: number[] = []
-  visibleTraces.value.forEach(t => { all.push(...sliceData(t)) })
-  if (all.length === 0) return ''
-  const min = Math.min(...all)
-  const max = Math.max(...all)
-  const range = max - min || 1
-  const step = chartW / (sl.length - 1)
-  const bottomY = padT + chartH
-
-  const pts = sl.map((v, i) => ({
-    x: padL + i * step,
-    y: padT + chartH - ((v - min) / range) * chartH,
-  }))
-
-  let d = `M${pts[0].x},${pts[0].y}`
-  for (let i = 1; i < pts.length; i++) {
-    const p0 = pts[i - 1], p1 = pts[i]
-    d += ` C${p0.x+(p1.x-p0.x)/3},${p0.y} ${p1.x-(p1.x-p0.x)/3},${p1.y} ${p1.x},${p1.y}`
-  }
-  d += ` L${pts[pts.length-1].x},${bottomY} L${pts[0].x},${bottomY} Z`
-  return d
-}
-
-function lastValue(t: Trace): string {
-  return t.data.length > 0 ? t.data[t.data.length - 1].toFixed(1) : '--'
-}
-
-function toggleTrace(i: number) {
-  const s = new Set(hiddenTraces.value)
-  if (s.has(i)) s.delete(i)
-  else s.add(i)
-  hiddenTraces.value = s
-}
-
-function removeTrace(i: number) {
-  traces.value.splice(i, 1)
-  const s = new Set(hiddenTraces.value)
-  s.clear()
-  hiddenTraces.value = s
-}
-
-// Data fetching
-async function fetchAllPoints() {
-  if (traces.value.length === 0) return
-  for (const t of traces.value) {
-    try {
-      const pt = await readPoint(t.instId, t.ioa)
-      const val = pt.value ?? 0
-      t.data.push(val)
-      if (t.data.length > 720) t.data.shift()
-    } catch {
-      // Skip failed reads silently
-    }
-  }
-  lastUpdate.value = new Date().toLocaleTimeString()
-  const maxPts = Math.max(...traces.value.map(t => t.data.length), 0)
-  pointsCount.value = Math.min(maxPts, Math.floor(timeRange.value * 60 / 5))
-}
-
-// Dialog
-async function openDialog() {
-  try {
-    const list = await listInstances()
-    allInstances.value = list.map(s => ({ id: s.id, name: s.name }))
-  } catch {}
-  formInst.value = ''
-  formIoa.value = null
-  formAlias.value = ''
-  formPoints.value = []
-  dialogVisible.value = true
-}
-
-async function onInstChange() {
-  formIoa.value = null
-  formPoints.value = []
-  if (!formInst.value) return
-  try {
-    const res = await getPoints(formInst.value)
-    formPoints.value = res.points.filter(p => p.point_type !== 'AO' && p.point_type !== 'DO')
-  } catch {}
-}
-
-function addTrace() {
-  if (!formInst.value || formIoa.value === null) {
-    ElMessage.warning('请选择实例和测点')
-    return
-  }
-  const inst = allInstances.value.find(i => i.id === formInst.value)
-  const pt = formPoints.value.find(p => p.ioa === formIoa.value)
-  if (!inst || !pt) return
-
-  traces.value.push({
-    instId: formInst.value,
-    inst: inst.name,
-    ioa: formIoa.value,
-    name: pt.name,
-    unit: pt.unit || '',
-    alias: formAlias.value,
-    colorIdx: traces.value.length,
-    data: [],
-  })
-  dialogVisible.value = false
+async function fetchAllPoints(){
+  if(!traces.value.length)return
+  for(const t of traces.value){try{const pt=await readPoint(t.instId,t.ioa);t.data.push(pt.value??0);if(t.data.length>720)t.data.shift()}catch{}}
+  lastUpdate.value=new Date().toLocaleTimeString()
+  pointsCount.value=Math.min(Math.max(...traces.value.map(t=>t.data.length),0),Math.floor(timeRange.value*60/5))
 }
 
 function saveToLocal() {
@@ -397,11 +259,29 @@ function loadFromLocal() {
   } catch {}
 }
 
+async function openDialog() {
+  try { const list = await listInstances(); allInstances.value = list.map(s => ({ id: s.id, name: s.name })) } catch {}
+  formInst.value = ''; formIoa.value = null; formAlias.value = ''; formPoints.value = []; dialogVisible.value = true
+}
+
+async function onInstChange() {
+  formIoa.value = null; formPoints.value = []
+  if (!formInst.value) return
+  try { const res = await getPoints(formInst.value); formPoints.value = res.points.filter(p => p.point_type !== 'AO' && p.point_type !== 'DO') } catch {}
+}
+
+function addTrace() {
+  if (!formInst.value || formIoa.value === null) { ElMessage.warning('请选择实例和测点'); return }
+  const inst = allInstances.value.find(i => i.id === formInst.value)
+  const pt = formPoints.value.find(p => p.ioa === formIoa.value)
+  if (!inst || !pt) return
+  traces.value.push({ instId: formInst.value, inst: inst.name, ioa: formIoa.value, name: pt.name, unit: pt.unit || '', alias: formAlias.value, colorIdx: traces.value.length, data: [] })
+  dialogVisible.value = false
+}
+
 onMounted(() => {
   loadFromLocal()
-  if (traces.value.length > 0) {
-    fetchAllPoints()
-  }
+  if (traces.value.length > 0) { fetchAllPoints() }
   pollTimer = setInterval(fetchAllPoints, 5000)
 })
 

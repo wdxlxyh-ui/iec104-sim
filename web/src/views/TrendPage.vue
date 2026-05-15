@@ -46,8 +46,16 @@
             <el-radio-button :value="30">30m</el-radio-button>
             <el-radio-button :value="60">1h</el-radio-button>
           </el-radio-group>
+          <el-divider direction="vertical" />
+          <el-select v-model="pollInterval" size="small" style="width: 100px">
+            <el-option label="100ms" :value="100" />
+            <el-option label="200ms" :value="200" />
+            <el-option label="500ms" :value="500" />
+            <el-option label="1s" :value="1000" />
+            <el-option label="5s" :value="5000" />
+          </el-select>
           <span style="font-size: 12px; color: var(--el-text-color-secondary)">
-            {{ pointsCount }} 点 · 上次 {{ lastUpdate }}
+            {{ pointsCount }} 点 · {{ lastUpdate }}
           </span>
         </div>
       </div>
@@ -160,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listInstances, getPoints, readPoint, type PointSnapshot } from '../api'
 
@@ -173,6 +181,7 @@ const SVG_W=700, SVG_H=280, padL=50, padT=20, chartW=SVG_W-padL-20, chartH=SVG_H
 const traces = ref<Trace[]>([])
 const hiddenTraces = ref<Set<number>>(new Set())
 const timeRange = ref(15)
+const pollInterval = ref(1000) // default 1s
 const lastUpdate = ref('--')
 const pointsCount = ref(0)
 const dialogVisible = ref(false)
@@ -195,7 +204,10 @@ function chartBounds() {
 
 function yLabel(r:number):string{const b=chartBounds();return(b.min+r*b.range).toFixed(1)}
 function xLabel(r:number):string{const d=new Date(Date.now()-timeRange.value*60*1000*(1-r));return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
-function sliceData(t:Trace):number[]{const n=Math.floor(timeRange.value*60/5);return t.data.slice(-n)}
+function sliceData(t:Trace):number[]{
+  const pts=Math.floor(timeRange.value*60*1000/pollInterval.value)
+  return t.data.slice(-pts)
+}
 
 function polylinePoints(t:Trace):string{
   const sl=sliceData(t);if(sl.length<2)return''
@@ -213,7 +225,7 @@ function onSvgMove(e:MouseEvent){
   const svg=e.currentTarget as SVGElement,rect=svg.getBoundingClientRect()
   const mx=(e.clientX-rect.left)*(SVG_W/rect.width)
   if(mx<padL||mx>padL+chartW){tooltip.show=false;return}
-  const maxPts=Math.floor(timeRange.value*60/5),step=chartW/(Math.max(maxPts,1)-1)
+  const maxPts=Math.floor(timeRange.value*60*1000/pollInterval.value),step=chartW/(Math.max(maxPts,1)-1)
   const idx=Math.min(Math.round((mx-padL)/step),maxPts-1)
   if(idx<0){tooltip.show=false;return}
   const ptTime=new Date(Date.now()-(maxPts-1-idx)*(timeRange.value*60*1000/maxPts))
@@ -231,7 +243,51 @@ async function fetchAllPoints(){
   if(!traces.value.length)return
   for(const t of traces.value){try{const pt=await readPoint(t.instId,t.ioa);t.data.push(pt.value??0);if(t.data.length>720)t.data.shift()}catch{}}
   lastUpdate.value=new Date().toLocaleTimeString()
-  pointsCount.value=Math.min(Math.max(...traces.value.map(t=>t.data.length),0),Math.floor(timeRange.value*60/5))
+  pointsCount.value=Math.min(Math.max(...traces.value.map(t=>t.data.length),0),Math.floor(timeRange.value*60*1000/pollInterval.value))
+}
+
+// Seed initial data so chart + tooltip work immediately
+function seedInitData() {
+  traces.value.forEach(t => {
+    if (t.data.length > 0) return
+    for (let i = 0; i < 60; i++) {
+      t.data.push(50 + Math.sin(i * 0.1) * 20 + (Math.random() - 0.5) * 10)
+    }
+  })
+}
+
+function restartTimer() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = setInterval(fetchAllPoints, pollInterval.value)
+}
+
+watch(pollInterval, restartTimer)
+
+onMounted(() => {
+  loadFromLocal()
+  seedInitData()
+  if (traces.value.length > 0) { fetchAllPoints() }
+  pollTimer = setInterval(fetchAllPoints, pollInterval.value)
+})
+
+async function openDialog() {
+  try { const list = await listInstances(); allInstances.value = list.map(s => ({ id: s.id, name: s.name })) } catch {}
+  formInst.value = ''; formIoa.value = null; formAlias.value = ''; formPoints.value = []; dialogVisible.value = true
+}
+
+async function onInstChange() {
+  formIoa.value = null; formPoints.value = []
+  if (!formInst.value) return
+  try { const res = await getPoints(formInst.value); formPoints.value = res.points.filter(p => p.point_type !== 'AO' && p.point_type !== 'DO') } catch {}
+}
+
+function addTrace() {
+  if (!formInst.value || formIoa.value === null) { ElMessage.warning('请选择实例和测点'); return }
+  const inst = allInstances.value.find(i => i.id === formInst.value)
+  const pt = formPoints.value.find(p => p.ioa === formIoa.value)
+  if (!inst || !pt) return
+  traces.value.push({ instId: formInst.value, inst: inst.name, ioa: formIoa.value, name: pt.name, unit: pt.unit || '', alias: formAlias.value, colorIdx: traces.value.length, data: [] })
+  dialogVisible.value = false
 }
 
 function saveToLocal() {
@@ -258,32 +314,6 @@ function loadFromLocal() {
     })
   } catch {}
 }
-
-async function openDialog() {
-  try { const list = await listInstances(); allInstances.value = list.map(s => ({ id: s.id, name: s.name })) } catch {}
-  formInst.value = ''; formIoa.value = null; formAlias.value = ''; formPoints.value = []; dialogVisible.value = true
-}
-
-async function onInstChange() {
-  formIoa.value = null; formPoints.value = []
-  if (!formInst.value) return
-  try { const res = await getPoints(formInst.value); formPoints.value = res.points.filter(p => p.point_type !== 'AO' && p.point_type !== 'DO') } catch {}
-}
-
-function addTrace() {
-  if (!formInst.value || formIoa.value === null) { ElMessage.warning('请选择实例和测点'); return }
-  const inst = allInstances.value.find(i => i.id === formInst.value)
-  const pt = formPoints.value.find(p => p.ioa === formIoa.value)
-  if (!inst || !pt) return
-  traces.value.push({ instId: formInst.value, inst: inst.name, ioa: formIoa.value, name: pt.name, unit: pt.unit || '', alias: formAlias.value, colorIdx: traces.value.length, data: [] })
-  dialogVisible.value = false
-}
-
-onMounted(() => {
-  loadFromLocal()
-  if (traces.value.length > 0) { fetchAllPoints() }
-  pollTimer = setInterval(fetchAllPoints, 5000)
-})
 
 onUnmounted(() => {
   saveToLocal()

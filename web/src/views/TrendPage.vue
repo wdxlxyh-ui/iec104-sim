@@ -2,10 +2,11 @@
   <div>
     <!-- Description -->
     <el-card shadow="never" style="margin-bottom: 16px">
-      <div style="font-size: 13px; color: #94a3b8; line-height: 1.8" :style="{color: 'var(--text-secondary)'}">
-        {{ t('trend_desc') }}
-        <span v-if="traces.length === 0" style="color: #f59e0b">
-          {{ t('trend_no_data') }}
+      <div style="font-size: 13px; color: #94a3b8; line-height: 1.8">
+        选取多个实例的测点，放在同一张图上对比趋势。
+        每 5 秒轮询一次，最长保留 1 小时数据。
+        <span v-if="traces.length === 0" style="color: var(--el-color-warning)">
+          请先添加测点开始监控。
         </span>
       </div>
     </el-card>
@@ -13,9 +14,9 @@
     <!-- Selected points -->
     <el-card shadow="never" style="margin-bottom: 16px">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
-        <span style="font-size: 14px; font-weight: 500">{{ t('trend_selected') }}</span>
-        <span style="font-size: 12px; color: var(--text-secondary)">
-          {{ traces.length }} / 8 {{ t('trend_lines') }}
+        <span style="font-size: 14px; font-weight: 500">已选测点</span>
+        <span style="font-size: 12px; color: var(--el-text-color-secondary)">
+          {{ traces.length }} / 8 条线
         </span>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 8px">
@@ -30,7 +31,7 @@
         >
           {{ t.inst }} · {{ t.alias || t.name || 'IOA:' + t.ioa }}
         </el-tag>
-        <el-button size="small" @click="openDialog">{{ t('trend_add') }}</el-button>
+        <el-button size="small" @click="openDialog">+ 添加测点</el-button>
       </div>
     </el-card>
 
@@ -56,49 +57,44 @@
         <div>点击上方「+ 添加测点」选择要跟踪的数据</div>
       </div>
 
-      <div v-else ref="chartRef" style="width: 100%; position: relative">
-        <!-- Tooltip -->
-        <div v-show="tooltip.show" :style="tooltip.style" style="position: absolute; z-index: 10; pointer-events: none;
-          background: #1a1f2e; border: 1px solid #334155; border-radius: 6px; padding: 10px 14px; font-size: 12px;
-          min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);">
-          <div style="color: #94a3b8; margin-bottom: 6px; font-size: 11px">{{ tooltip.time }}</div>
-          <div v-for="(v, i) in tooltip.vals" :key="i"
-            style="display: flex; justify-content: space-between; gap: 16px; padding: 2px 0">
-            <span style="color: #94a3b8; white-space: nowrap">
-              <span :style="{ display:'inline-block', width:'8px', height:'2px', background:COLORS[i%COLORS.length], marginRight:'6px', verticalAlign:'middle' }"></span>
-              {{ v.name }}
-            </span>
-            <span style="font-family: monospace; font-weight: 600" :style="{ color: COLORS[i % COLORS.length] }">{{ v.val }}</span>
-          </div>
-        </div>
-
-        <svg :viewBox="`0 0 ${SVG_W} ${SVG_H}`" preserveAspectRatio="xMidYMid meet"
-          style="width: 100%; height: auto; display: block"
-          @mousemove="onSvgMove" @mouseleave="tooltip.show = false">
+      <div v-else ref="chartRef" style="width: 100%">
+        <svg :viewBox="`0 0 ${SVG_W} ${SVG_H}`" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: auto; display: block">
           <!-- Grid lines -->
           <line v-for="i in 6" :key="'g'+i"
             :x1="padL" :y1="padT + chartH - (i/6)*chartH"
             :x2="padL + chartW" :y2="padT + chartH - (i/6)*chartH"
             stroke="#1e293b" stroke-width="0.5" />
+          <!-- Y labels -->
           <text v-for="i in 6" :key="'yl'+i"
             :x="padL - 6" :y="padT + chartH - (i/6)*chartH + 3"
             text-anchor="end" font-size="10" font-family="monospace" fill="#475569"
           >{{ yLabel(i/6) }}</text>
+          <!-- Axes -->
           <line :x1="padL" :y1="padT" :x2="padL" :y2="padT+chartH" stroke="#1e293b" stroke-width="1" />
           <line :x1="padL" :y1="padT+chartH" :x2="padL+chartW" :y2="padT+chartH" stroke="#1e293b" stroke-width="1" />
+          <!-- X labels -->
           <text v-for="i in 5" :key="'xl'+i"
             :x="padL + (i/5)*chartW" :y="padT + chartH + 16"
             text-anchor="middle" font-size="10" font-family="monospace" fill="#475569"
           >{{ xLabel(i/5) }}</text>
           <!-- Data lines with gradient fill -->
           <template v-for="(t, vi) in visibleTraces" :key="'trace'+vi">
-            <path :d="areaPath(t)" :fill="`url(#grad-${t.colorIdx % COLORS.length})`" opacity="0.15" />
-            <polyline :points="polylinePoints(t)" :stroke="COLORS[t.colorIdx % COLORS.length]"
-              fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+            <!-- Gradient fill area -->
+            <path
+              :d="areaPath(t, vi)"
+              :fill="`url(#grad-${t.colorIdx % COLORS.length})`"
+              opacity="0.15"
+            />
+            <!-- Line -->
+            <path
+              :d="smoothPath(t, vi)"
+              :stroke="COLORS[t.colorIdx % COLORS.length]"
+              fill="none"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
           </template>
-          <!-- Invisible hover overlay -->
-          <rect :x="padL" y="0" :width="chartW" :height="SVG_H" fill="transparent"
-            @mousemove="onSvgMove" @mouseleave="tooltip.show = false" />
         </svg>
 
         <!-- SVG gradient defs -->
@@ -158,8 +154,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listInstances, getPoints, readPoint, type PointSnapshot } from '../api'
-import { useI18n } from '../composables/useI18n'
-const { t } = useI18n()
 
 const COLORS = ['#14b8a6', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#22d3ee', '#f97316', '#8b5cf6']
 
@@ -196,29 +190,20 @@ const formAlias = ref('')
 const formPoints = ref<PointSnapshot[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-const tooltip = reactive({
-  show: false,
-  style: { left: '0px', top: '0px' },
-  time: '',
-  vals: [] as { name: string; val: string }[],
-})
-
 const visibleTraces = computed(() => traces.value.filter((_, i) => !hiddenTraces.value.has(i)))
 
 // SVG helpers
-function chartBounds(): { min: number; max: number; range: number } {
+function yLabel(ratio: number): string {
   const all: number[] = []
-  visibleTraces.value.forEach(t => all.push(...sliceData(t)))
-  if (all.length === 0) return { min: 0, max: 1, range: 1 }
+  visibleTraces.value.forEach(t => {
+    const sl = sliceData(t)
+    all.push(...sl)
+  })
+  if (all.length === 0) return '0'
   const min = Math.min(...all)
   const max = Math.max(...all)
   const range = max - min || 1
-  return { min, max, range }
-}
-
-function yLabel(ratio: number): string {
-  const b = chartBounds()
-  return (b.min + ratio * b.range).toFixed(1)
+  return ((min + ratio * range)).toFixed(1)
 }
 
 function xLabel(ratio: number): string {
@@ -231,69 +216,79 @@ function sliceData(t: Trace): number[] {
   return t.data.slice(-maxPts)
 }
 
-function polylinePoints(t: Trace): string {
+function linePoints(t: Trace, vi: number): string {
   const sl = sliceData(t)
   if (sl.length < 2) return ''
-  const b = chartBounds()
+  const all: number[] = []
+  visibleTraces.value.forEach(t => { all.push(...sliceData(t)) })
+  if (all.length === 0) return ''
+  const min = Math.min(...all)
+  const max = Math.max(...all)
+  const range = max - min || 1
   const step = chartW / (sl.length - 1)
   return sl.map((v, i) => {
     const x = padL + i * step
-    const y = padT + chartH - ((v - b.min) / b.range) * chartH
+    const y = padT + chartH - ((v - min) / range) * chartH
     return `${x},${y}`
   }).join(' ')
 }
 
-function areaPath(t: Trace): string {
-  const pts = polylinePoints(t)
-  if (!pts) return ''
-  const firstX = pts.split(',')[0]
-  const lastPt = pts.split(' ').pop() || ''
-  const lastX = lastPt.split(',')[0]
-  const bottomY = padT + chartH
-  return `M${firstX},${bottomY} L${pts} L${lastX},${bottomY} Z`
+function smoothPath(t: Trace, vi: number): string {
+  const sl = sliceData(t)
+  if (sl.length < 2) return ''
+  const all: number[] = []
+  visibleTraces.value.forEach(t => { all.push(...sliceData(t)) })
+  if (all.length === 0) return ''
+  const min = Math.min(...all)
+  const max = Math.max(...all)
+  const range = max - min || 1
+  const step = chartW / (sl.length - 1)
+
+  // Build smooth cubic bezier path
+  const pts = sl.map((v, i) => ({
+    x: padL + i * step,
+    y: padT + chartH - ((v - min) / range) * chartH,
+  }))
+
+  if (pts.length < 2) return ''
+  let d = `M${pts[0].x},${pts[0].y}`
+
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1]
+    const p1 = pts[i]
+    const cp1x = p0.x + (p1.x - p0.x) / 3
+    const cp1y = p0.y
+    const cp2x = p1.x - (p1.x - p0.x) / 3
+    const cp2y = p1.y
+    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p1.x},${p1.y}`
+  }
+  return d
 }
 
-function onSvgMove(e: MouseEvent) {
-  const svg = (e.currentTarget as SVGElement)
-  const rect = svg.getBoundingClientRect()
-  const scaleX = SVG_W / rect.width
-  const mx = (e.clientX - rect.left) * scaleX
-  if (mx < padL || mx > padL + chartW) { tooltip.show = false; return }
+function areaPath(t: Trace, vi: number): string {
+  const sl = sliceData(t)
+  if (sl.length < 2) return ''
+  const all: number[] = []
+  visibleTraces.value.forEach(t => { all.push(...sliceData(t)) })
+  if (all.length === 0) return ''
+  const min = Math.min(...all)
+  const max = Math.max(...all)
+  const range = max - min || 1
+  const step = chartW / (sl.length - 1)
+  const bottomY = padT + chartH
 
-  const maxPts = Math.floor(timeRange.value * 60 / 5)
-  const step = chartW / (Math.max(maxPts, 1) - 1)
-  const idx = Math.round((mx - padL) / step)
-  const actualIdx = Math.min(idx, maxPts - 1)
-  if (actualIdx < 0) { tooltip.show = false; return }
+  const pts = sl.map((v, i) => ({
+    x: padL + i * step,
+    y: padT + chartH - ((v - min) / range) * chartH,
+  }))
 
-  // Calculate time at this point
-  const now = Date.now()
-  const timePerPoint = timeRange.value * 60 * 1000 / maxPts
-  const pointTime = new Date(now - (maxPts - 1 - actualIdx) * timePerPoint)
-
-  const vals: { name: string; val: string }[] = []
-  visibleTraces.value.forEach(t => {
-    const sl = sliceData(t)
-    if (actualIdx < sl.length) {
-      vals.push({ name: `${t.inst}·${t.alias || t.name}`, val: sl[actualIdx].toFixed(1) })
-    }
-  })
-
-  // Position tooltip relative to the chart container
-  const container = svg.parentElement
-  if (container) {
-    const cRect = container.getBoundingClientRect()
-    const relX = (e.clientX - cRect.left) + 12
-    const relY = (e.clientY - cRect.top) - 10
-    tooltip.style = {
-      left: `${Math.min(relX, cRect.width - 180)}px`,
-      top: `${relY}px`,
-    }
+  let d = `M${pts[0].x},${pts[0].y}`
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1], p1 = pts[i]
+    d += ` C${p0.x+(p1.x-p0.x)/3},${p0.y} ${p1.x-(p1.x-p0.x)/3},${p1.y} ${p1.x},${p1.y}`
   }
-
-  tooltip.time = pointTime.toLocaleTimeString()
-  tooltip.vals = vals
-  tooltip.show = true
+  d += ` L${pts[pts.length-1].x},${bottomY} L${pts[0].x},${bottomY} Z`
+  return d
 }
 
 function lastValue(t: Trace): string {

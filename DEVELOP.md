@@ -179,6 +179,10 @@ return cfg.Strategy == model.StrategyAPIUpdate || cfg.Strategy == model.Strategy
 
 `GET /api/v1/files` 返回 `configDir` 目录下所有 `.xlsx` 文件的名称、大小和修改时间。
 
+**CSV 上传路径**：`POST /api/v1/instances/{id}/upload-csv` 将 CSV 文件保存到 `configDir/csv/{instanceID}/{filename}`。自动变化引擎查找 CSV 时优先查实例目录 (`csv/{id}/`)，查不到再回退共享目录 (`csv/`)。
+
+> **v2.2.0 修复**：之前引擎只查 `csv/{filename}`，与上传路径不匹配导致 CSV 回放失败。
+
 **⚠️ 历史 Bug**：v2.1.5 之前版本中 `handleFiles` 直接返回空数组 `{"files": []}`，导致前端"点表文件"下拉框永远为空。手动放置在 `config/` 目录下的 xlsx 文件不会被自动列出，必须通过界面上传或手动编辑 `instances.json` 引用。
 
 > **v2.1.5 已修复**：`handleFiles` 现在正确扫描 `configDir` 目录。

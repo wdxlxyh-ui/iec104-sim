@@ -28,6 +28,8 @@ logs/
 
 # 运行时配置 (用户数据)
 config/instances.json
+config/auto_changes/
+config/users.json
 
 # OpenCode 工作目录
 .opencode/
@@ -39,3 +41,4 @@ config/instances.json
 web/node_modules/
 web/package-lock.json
 *.tar.gz
+config/csv/

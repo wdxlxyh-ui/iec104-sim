@@ -38,3 +38,4 @@ config/instances.json
 # 前端依赖
 web/node_modules/
 web/package-lock.json
+*.tar.gz

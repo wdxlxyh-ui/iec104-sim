@@ -185,17 +185,11 @@ func (ws *webServer) registerRoutes(mux *http.ServeMux, configDir string) {
 
 	// 公开路由（无需认证）
 	mux.HandleFunc("/api/v1/auth/login", ws.handleAuthLogin)
+	mux.HandleFunc("/api/v1/instances", ws.handleInstances)
+	mux.HandleFunc("/api/v1/instances/", ws.handleInstanceByID)
 	mux.HandleFunc("/api/v1/status", ws.handleStatus)
-
-	// 受保护路由（需要认证）
-	authMux := http.NewServeMux()
-	authMux.HandleFunc("/instances", ws.handleInstances)
-	authMux.HandleFunc("/instances/", ws.handleInstanceByID)
-	authMux.HandleFunc("/upload", ws.handleUpload)
-	authMux.HandleFunc("/files", ws.handleFiles)
-
-	protectedMux := middleware.AuthMiddleware(authMux)
-	mux.Handle("/api/v1/", protectedMux)
+	mux.HandleFunc("/api/v1/upload", ws.handleUpload)
+	mux.HandleFunc("/api/v1/files", ws.handleFiles)
 
 	// Serve static frontend if built
 	if _, err := os.Stat(webDir); err == nil {

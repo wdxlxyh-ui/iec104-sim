@@ -25,11 +25,13 @@ import (
 	"iec104-sim/pkg/firewall"
 	"iec104-sim/pkg/iec104"
 	"iec104-sim/pkg/library"
+	"iec104-sim/pkg/middleware"
 
 	"github.com/spf13/pflag"
+	"golang.org/x/crypto/bcrypt"
 )
 
-var version = "2.1.3"
+var version = "2.3.0"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
@@ -92,7 +94,7 @@ func runLegacyMode() {
 	}
 	firewall.EnsurePort(port, "iec104-sim-data")
 
-	httpSrv := &http.Server{Addr: httpAddr, Handler: mux}
+	httpSrv := newHTTPServer(httpAddr, mux)
 	go func() {
 		slog.Info("HTTP API 已启动", "addr", httpAddr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -113,9 +115,10 @@ func runLegacyMode() {
 // ─── Server Mode (web management) ──────────────────────────────────────────
 
 type webServer struct {
-	mgr     *manager.Manager
-	httpSrv *http.Server
-	cfgDir  string
+	mgr        *manager.Manager
+	httpSrv    *http.Server
+	cfgDir     string
+	userConfig *model.UserConfig
 }
 
 func runServerMode() {
@@ -147,7 +150,8 @@ func runServerMode() {
 
 	// Build HTTP mux
 	mux := http.NewServeMux()
-	ws := &webServer{mgr: mgr, cfgDir: configDir}
+	userCfg := loadUserConfig(configDir)
+	ws := &webServer{mgr: mgr, cfgDir: configDir, userConfig: userCfg}
 	ws.registerRoutes(mux, configDir)
 
 	if p := parsePort(httpAddr); p > 0 {
@@ -155,7 +159,7 @@ func runServerMode() {
 	}
 
 	// Start HTTP server
-	httpSrv := &http.Server{Addr: httpAddr, Handler: mux}
+	httpSrv := newHTTPServer(httpAddr, mux)
 	go func() {
 		slog.Info("管理服务已启动", "http", httpAddr, "configDir", configDir)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -176,16 +180,17 @@ func runServerMode() {
 
 func (ws *webServer) registerRoutes(mux *http.ServeMux, configDir string) {
 	// Resolve web/dist relative to executable path.
-	// IMPORTANT: 二进制位于 bin/ 目录，前端位于 ../web/dist（包根目录/web/dist）。
-	// 禁止使用 ./web/dist（依赖 CWD）或 bin/web/dist（路径错误）。
 	exePath, _ := os.Executable()
 	webDir := filepath.Join(filepath.Dir(exePath), "..", "web", "dist")
 
+	// 公开路由（无需认证）
+	mux.HandleFunc("/api/v1/auth/login", ws.handleAuthLogin)
 	mux.HandleFunc("/api/v1/instances", ws.handleInstances)
 	mux.HandleFunc("/api/v1/instances/", ws.handleInstanceByID)
 	mux.HandleFunc("/api/v1/status", ws.handleStatus)
 	mux.HandleFunc("/api/v1/upload", ws.handleUpload)
 	mux.HandleFunc("/api/v1/files", ws.handleFiles)
+
 	// Serve static frontend if built
 	if _, err := os.Stat(webDir); err == nil {
 		mux.Handle("/", http.FileServer(http.Dir(webDir)))
@@ -411,30 +416,85 @@ func (ws *webServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+var (
+	uploadMaxFileSize     int64 = 10 * 1024 * 1024
+	uploadAllowedExts          = map[string]bool{".xlsx": true, ".xls": true, ".csv": true}
+	uploadAllowedMIME         = []string{
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"application/vnd.ms-excel",
+		"text/csv",
+	}
+	uploadBlockExts = []string{".exe", ".sh", ".php", ".js", ".html", ".sql", ".bat", ".cmd", ".pkl", ".so", ".dll"}
+)
+
 func (ws *webServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	r.ParseMultipartForm(32 << 20)
+	if err := r.ParseMultipartForm(uploadMaxFileSize); err != nil {
+		writeError(w, http.StatusBadRequest, "file too large or malformed")
+		return
+	}
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "no file provided: "+err.Error())
+		writeError(w, http.StatusBadRequest, "no file provided")
 		return
 	}
 	defer file.Close()
 
-	filename := ws.saveUploadedFile(file, header)
-	if filename == "" {
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if !uploadAllowedExts[ext] {
+		writeError(w, http.StatusBadRequest, "file type not allowed: "+ext)
+		return
+	}
+
+	contentType := header.Header.Get("Content-Type")
+	allowedMIME := false
+	for _, m := range uploadAllowedMIME {
+		if contentType == m {
+			allowedMIME = true
+			break
+		}
+	}
+	if !allowedMIME {
+		writeError(w, http.StatusBadRequest, "invalid file content type")
+		return
+	}
+
+	baseName := strings.ToLower(header.Filename)
+	for _, blocked := range uploadBlockExts {
+		if strings.HasSuffix(baseName, blocked) {
+			writeError(w, http.StatusBadRequest, "extension not allowed")
+			return
+		}
+	}
+
+	safeName := sanitizeFilename(header.Filename)
+	dst := filepath.Join(ws.cfgDir, safeName)
+
+	if _, err := os.Stat(dst); err == nil {
+		writeError(w, http.StatusConflict, "file already exists")
+		return
+	}
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create file")
+		return
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, file); err != nil {
+		os.Remove(dst)
 		writeError(w, http.StatusInternalServerError, "failed to save file")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":   "uploaded",
-		"filename": filename,
-	})
+	slog.Info("文件上传成功", "filename", safeName, "size", header.Size, "uploader", r.RemoteAddr)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "uploaded", "filename": safeName})
 }
 
 func (ws *webServer) handleFiles(w http.ResponseWriter, r *http.Request) {
@@ -515,6 +575,85 @@ func validateConfig(cfg model.InstanceConfig) error {
 	return nil
 }
 
+func loadUserConfig(configDir string) *model.UserConfig {
+	userConfigPath := filepath.Join(configDir, "users.json")
+	data, err := os.ReadFile(userConfigPath)
+	if err != nil {
+		slog.Warn("加载用户配置失败，使用空配置", "error", err)
+		return &model.UserConfig{}
+	}
+	var cfg model.UserConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		slog.Warn("解析用户配置失败，使用空配置", "error", err)
+		return &model.UserConfig{}
+	}
+	return &cfg
+}
+
+func (ws *webServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	var matchedUser *model.User
+	if ws.userConfig != nil {
+		for i := range ws.userConfig.Users {
+			if ws.userConfig.Users[i].Username == req.Username {
+				matchedUser = &ws.userConfig.Users[i]
+				break
+			}
+		}
+	}
+
+	// Fallback: 当用户配置为空或未找到时，允许默认 admin/admin 登录
+	const defaultHash = "$2a$10$7dSwaeEyvftiwQigG9lUmeJokV/CV6IVcPPcCAxriAMQOxMX3n7FK"
+	if matchedUser == nil && req.Username == "admin" {
+		if err := bcrypt.CompareHashAndPassword([]byte(defaultHash), []byte(req.Password)); err == nil {
+			matchedUser = &model.User{
+				ID:           "user-admin-001",
+				Username:     "admin",
+				PasswordHash: defaultHash,
+				Role:         "admin",
+			}
+		}
+	}
+
+	if matchedUser == nil {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(matchedUser.PasswordHash), []byte(req.Password)); err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	token, err := middleware.GenerateToken(matchedUser)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"token": token,
+		"user": map[string]string{
+			"id":       matchedUser.ID,
+			"username": matchedUser.Username,
+			"role":     matchedUser.Role,
+		},
+	})
+}
+
 func (ws *webServer) saveUploadedFile(file multipart.File, header *multipart.FileHeader) string {
 	filename := filepath.Base(header.Filename)
 	dst := filepath.Join(ws.cfgDir, filename)
@@ -528,6 +667,17 @@ func (ws *webServer) saveUploadedFile(file multipart.File, header *multipart.Fil
 	}
 	slog.Info("文件上传成功", "filename", filename, "path", dst)
 	return filename
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:           addr,
+		Handler:        middleware.Recovery(middleware.Logger(handler)),
+		ReadTimeout:    15 * time.Second,
+		WriteTimeout:   15 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
 }
 
 func setupLogLevel(level string) {
@@ -571,9 +721,35 @@ func countByType(points []*config.Point) map[string]int {
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if data == nil {
+		return
+	}
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		slog.Warn("write JSON failed", "error", err)
+	}
+}
+
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Code    string `json:"code,omitempty"`
+	Details any    `json:"details,omitempty"`
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	writeJSON(w, status, ErrorResponse{Error: msg})
+}
+
+func writeErrorWithCode(w http.ResponseWriter, status int, code, msg string) {
+	writeJSON(w, status, ErrorResponse{Error: msg, Code: code})
+}
+
+func sanitizeFilename(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r < 32 || r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			return -1
+		}
+		return r
+	}, name)
+	name = strings.ReplaceAll(name, "..", "")
+	return name
 }

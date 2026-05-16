@@ -16,6 +16,8 @@ type publisher interface {
 	Publish(point *config.Point)
 }
 
+const maxConcurrentTasks = 100
+
 type Engine struct {
 	mu       sync.RWMutex
 	store    *library.Store
@@ -26,11 +28,11 @@ type Engine struct {
 	state    map[uint32]*strategyState
 	instanceID string
 	cfgDir   string
+	wg       sync.WaitGroup
 }
 
 type changeTask struct {
 	cancel context.CancelFunc
-	done   chan struct{}
 }
 
 func NewEngine(instanceID string, store *library.Store, pub publisher, acStore *AutoChangeStore, cfgDir string, provider StoreProvider) *Engine {
@@ -89,10 +91,10 @@ func (e *Engine) StopAll() {
 
 	for ioa, task := range e.tasks {
 		task.cancel()
-		<-task.done
 		delete(e.tasks, ioa)
 		delete(e.state, ioa)
 	}
+	e.wg.Wait()
 }
 
 func (e *Engine) IsRunning(ioa uint32) bool {
@@ -116,10 +118,10 @@ func (e *Engine) SaveAll(configs map[uint32]*model.AutoChangeConfig) error {
 
 	for ioa, task := range e.tasks {
 		task.cancel()
-		<-task.done
 		delete(e.tasks, ioa)
 		delete(e.state, ioa)
 	}
+	e.wg.Wait()
 	for _, cfg := range configs {
 		if cfg.Enabled {
 			e.startTaskLocked(cfg)
@@ -150,10 +152,14 @@ func (e *Engine) startTaskLocked(cfg *model.AutoChangeConfig) {
 		return
 	}
 
+	if len(e.tasks) >= maxConcurrentTasks {
+		slog.Error("已达到最大并发任务数", "max", maxConcurrentTasks, "current", len(e.tasks))
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	task := &changeTask{
 		cancel: cancel,
-		done:   make(chan struct{}),
 	}
 
 	state := &strategyState{}
@@ -174,9 +180,10 @@ func (e *Engine) startTaskLocked(cfg *model.AutoChangeConfig) {
 
 	e.tasks[cfg.PointIOA] = task
 	e.state[cfg.PointIOA] = state
+	e.wg.Add(1)
 
 	go func() {
-		defer close(task.done)
+		defer e.wg.Done()
 		ticker := time.NewTicker(period)
 		defer ticker.Stop()
 
@@ -202,7 +209,6 @@ func (e *Engine) stopTaskLocked(ioa uint32) {
 		return
 	}
 	task.cancel()
-	<-task.done
 	delete(e.tasks, ioa)
 	delete(e.state, ioa)
 	slog.Info("自动变化任务已停止", "ioa", ioa)

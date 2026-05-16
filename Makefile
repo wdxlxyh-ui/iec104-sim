@@ -1,5 +1,5 @@
 PROJECT   := iec104-sim
-VERSION   := 2.2.0
+VERSION   := 2.3.0
 LDFLAGS   := -ldflags="-s -w -X main.version=$(VERSION)"
 DIST_DIR  := dist
 BIN_DIR   := bin
@@ -53,6 +53,12 @@ web-build:
 # ── 完整构建 (含前端) ───────────────────────────────────
 build-full: web-build build-linux-amd64
 
+# ── 获取 Git 信息 ───────────────────────────────────────
+GIT_TAG       := $(shell git describe --tags 2>/dev/null || echo "v$(VERSION)")
+GIT_COMMIT    := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH    := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE    := $(shell date -u +"%Y-%m-%dT%H:%M:%S")
+
 # ── 三平台全部打包 tar.gz/zip ──────────────────────────
 dist: web-build build-all
 	@echo ""
@@ -67,7 +73,12 @@ dist: web-build build-all
 	cp $(BIN_DIR)/iec104-mcp $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/iec104-mcp
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/*.sh
+	@# Generate VERSION file
+	printf 'tag %s\ncommit_id %s\nbuild_date %s\nbranch %s\n' \
+		'$(GIT_TAG)' '$(GIT_COMMIT)' '$(BUILD_DATE)' '$(GIT_BRANCH)' \
+		> $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/VERSION
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/instances.json
+	printf '{"users":[{"id":"user-admin-001","username":"admin","password_hash":"$$2a$$10$$7dSwaeEyvftiwQigG9lUmeJokV/CV6IVcPPcCAxriAMQOxMX3n7FK","role":"admin","created_at":1715846400}]}\n' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/users.json
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs/.gitkeep
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources/.gitkeep
 	@if [ -d web/dist ]; then \
@@ -86,7 +97,12 @@ dist: web-build build-all
 	cp $(BIN_DIR)/iec104-mcp-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/iec104-mcp
 	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/
 	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/*.sh
+	@# Generate VERSION file
+	printf 'tag %s\ncommit_id %s\nbuild_date %s\nbranch %s\n' \
+		'$(GIT_TAG)' '$(GIT_COMMIT)' '$(BUILD_DATE)' '$(GIT_BRANCH)' \
+		> $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/VERSION
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config/instances.json
+	printf '{"users":[{"id":"user-admin-001","username":"admin","password_hash":"$$2a$$10$$7dSwaeEyvftiwQigG9lUmeJokV/CV6IVcPPcCAxriAMQOxMX3n7FK","role":"admin","created_at":1715846400}]}\n' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config/users.json
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/logs/.gitkeep
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/resources/.gitkeep
 	@if [ -d web/dist ]; then \
@@ -105,7 +121,12 @@ dist: web-build build-all
 	cp $(BIN_DIR)/$(PROJECT).exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/$(PROJECT).exe
 	cp $(BIN_DIR)/iec104-mcp.exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/iec104-mcp.exe
 	cp scripts/start.bat scripts/stop.bat scripts/restart.bat $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/scripts/
+	@# Generate VERSION file for Windows
+	printf 'tag %s\ncommit_id %s\nbuild_date %s\nbranch %s\n' \
+		'$(GIT_TAG)' '$(GIT_COMMIT)' '$(BUILD_DATE)' '$(GIT_BRANCH)' \
+		> $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/VERSION
 	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/config/instances.json
+	printf '{"users":[{"id":"user-admin-001","username":"admin","password_hash":"$$2a$$10$$7dSwaeEyvftiwQigG9lUmeJokV/CV6IVcPPcCAxriAMQOxMX3n7FK","role":"admin","created_at":1715846400}]}\n' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/config/users.json
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/logs/.gitkeep
 	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/resources/.gitkeep
 	@if [ -d web/dist ]; then \

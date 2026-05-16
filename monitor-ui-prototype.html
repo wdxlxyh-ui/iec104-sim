@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IEC104 集中监控系统原型</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus@2.8.0/dist/index.css">
+    <script src="https://unpkg.com/vue@3.5.0/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/element-plus@2.8.0/dist/index.full.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        
+        /* Header */
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+        .header-left { display: flex; align-items: center; gap: 16px; }
+        .logo { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .header-title { font-size: 20px; font-weight: 600; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        
+        /* Layout */
+        .main-container { display: flex; height: calc(100vh - 73px); }
+        
+        /* Sidebar */
+        .sidebar { width: 260px; background: #1e293b; border-right: 1px solid #334155; padding: 16px 0; overflow-y: auto; }
+        .sidebar-section { padding: 0 12px; margin-bottom: 16px; }
+        .sidebar-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; padding: 8px 12px; }
+        .server-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 4px; }
+        .server-item:hover { background: #334155; }
+        .server-item.active { background: #3b82f6; }
+        .server-status { width: 8px; height: 8px; border-radius: 50%; }
+        .server-status.online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .server-status.offline { background: #ef4444; }
+        .server-name { flex: 1; font-size: 14px; }
+        .server-count { font-size: 12px; color: #64748b; }
+        .add-server-btn { margin: 8px 12px; padding: 10px; border: 1px dashed #334155; border-radius: 8px; text-align: center; color: #64748b; cursor: pointer; transition: all 0.2s; }
+        .add-server-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+        
+        /* Main Content */
+        .main-content { flex: 1; padding: 24px; overflow-y: auto; }
+        
+        /* Stats Cards */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+        .stat-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .stat-label { font-size: 13px; color: #64748b; }
+        .stat-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .stat-value { font-size: 32px; font-weight: 700; }
+        .stat-change { font-size: 12px; color: #10b981; margin-top: 4px; }
+        
+        /* Sub Server Detail */
+        .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .detail-title { font-size: 24px; font-weight: 600; }
+        .detail-actions { display: flex; gap: 12px; }
+        
+        .instance-list { background: #1e293b; border-radius: 12px; border: 1px solid #334155; overflow: hidden; }
+        .instance-list-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 100px; padding: 16px 20px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 13px; color: #64748b; }
+        .instance-item { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 100px; padding: 16px 20px; border-bottom: 1px solid #334155; align-items: center; }
+        .instance-item:last-child { border-bottom: none; }
+        .instance-name { font-weight: 500; }
+        .instance-tag { display: inline-block; padding: 2px 8px; background: #3b82f620; color: #3b82f6; border-radius: 4px; font-size: 12px; }
+        .instance-status { display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-dot.running { background: #10b981; }
+        .status-dot.stopped { background: #64748b; }
+        
+        /* Buttons */
+        .btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-ghost { background: transparent; color: #64748b; border: 1px solid #334155; }
+        
+        /* Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: #1e293b; border-radius: 16px; width: 500px; max-height: 80vh; overflow: hidden; }
+        .modal-header { padding: 20px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 18px; font-weight: 600; }
+        .modal-close { width: 32px; height: 32px; border-radius: 8px; background: transparent; border: none; color: #64748b; cursor: pointer; font-size: 20px; }
+        .modal-body { padding: 24px; }
+        .modal-footer { padding: 16px 24px; border-top: 1px solid #334155; display: flex; justify-content: flex-end; gap: 12px; }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-label { display: block; font-size: 14px; color: #e2e8f0; margin-bottom: 8px; }
+        .form-input { width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; }
+        .form-input:focus { outline: none; border-color: #3b82f6; }
+        
+        /* Log View */
+        .log-panel { background: #0f172a; border-radius: 12px; border: 1px solid #334155; margin-top: 24px; }
+        .log-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .log-title { font-size: 16px; font-weight: 500; }
+        .log-content { height: 300px; padding: 16px 20px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; color: #10b981; overflow-y: auto; line-height: 1.8; }
+        
+        /* Quick Actions */
+        .quick-actions { display: flex; gap: 8px; }
+        .quick-btn { padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; border: none; }
+        .quick-btn.start { background: #10b98120; color: #10b981; }
+        .quick-btn.stop { background: #ef444420; color: #ef4444; }
+        .quick-btn.view { background: #3b82f620; color: #3b82f6; }
+        
+        /* Empty State */
+        .empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
+        .empty-icon { font-size: 48px; margin-bottom: 16px; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">⚡</div>
+                <div class="header-title">IEC104 集中监控系统</div>
+            </div>
+            <div class="header-right">
+                <div class="btn btn-ghost">🔔 通知</div>
+                <div class="btn btn-ghost">⚙️ 设置</div>
+                <div class="btn btn-ghost">👤 管理员</div>
+            </div>
+        </div>
+        
+        <!-- Main Container -->
+        <div class="main-container">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">子服务器</div>
+                    
+                    <div class="server-item active">
+                        <div class="server-status online"></div>
+                        <div class="server-name">变电站A - 主控</div>
+                        <div class="server-count">3</div>
+                    </div>
+                    
+                    <div class="server-item">
+                        <div class="server-status online"></div>
+                        <div class="server-name">变电站A - 保护</div>
+                        <div class="server-count">2</div>
+                    </div>
+                    
+                    <div class="server-item">
+                        <div class="server-status online"></div>
+                        <div class="server-name">变电站B - 测控</div>
+                        <div class="server-count">2</div>
+                    </div>
+                    
+                    <div class="server-item">
+                        <div class="server-status offline"></div>
+                        <div class="server-name">变电站C - 计量</div>
+                        <div class="server-count">0</div>
+                    </div>
+                    
+                    <div class="add-server-btn">+ 添加子服务器</div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">快捷操作</div>
+                    <div style="padding: 0 12px; display: flex; flex-direction: column; gap: 8px;">
+                        <div class="btn btn-primary" style="width: 100%;">📊 查看所有状态</div>
+                        <div class="btn btn-ghost" style="width: 100%;">▶️ 批量启动</div>
+                        <div class="btn btn-ghost" style="width: 100%;">⏹️ 批量停止</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <span class="stat-label">子服务器</span>
+                            <div class="stat-icon" style="background: #3b82f620; color: #3b82f6;">🖥️</div>
+                        </div>
+                        <div class="stat-value">4</div>
+                        <div class="stat-change">在线 3 / 离线 1</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <span class="stat-label">实例总数</span>
+                            <div class="stat-icon" style="background: #10b98120; color: #10b981;">📦</div>
+                        </div>
+                        <div class="stat-value">7</div>
+                        <div class="stat-change">运行中 5 / 已停止 2</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <span class="stat-label">测点总数</span>
+                            <div class="stat-icon" style="background: #f59e0b20; color: #f59e0b;">📊</div>
+                        </div>
+                        <div class="stat-value">1,234</div>
+                        <div class="stat-change">AI 800 / DI 434</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <span class="stat-label">今日变化上送</span>
+                            <div class="stat-icon" style="background: #8b5cf620; color: #8b5cf6;">📈</div>
+                        </div>
+                        <div class="stat-value">15.6k</div>
+                        <div class="stat-change">↑ 12% 较昨日</div>
+                    </div>
+                </div>
+                
+                <!-- Detail Header -->
+                <div class="detail-header">
+                    <div class="detail-title">变电站A - 主控服务器 (192.168.1.101)</div>
+                    <div class="detail-actions">
+                        <div class="btn btn-ghost">🔄 刷新状态</div>
+                        <div class="btn btn-success">▶️ 启动全部</div>
+                        <div class="btn btn-danger">⏹️ 停止全部</div>
+                    </div>
+                </div>
+                
+                <!-- Instance List -->
+                <div class="instance-list">
+                    <div class="instance-list-header">
+                        <span>实例名称</span>
+                        <span>端口</span>
+                        <span>测点数</span>
+                        <span>客户端</span>
+                        <span>状态</span>
+                        <span>操作</span>
+                    </div>
+                    
+                    <div class="instance-item">
+                        <div>
+                            <div class="instance-name">主控实例1</div>
+                            <div style="font-size: 12px; color: #64748b;">ID: inst-main-001</div>
+                        </div>
+                        <div>2404</div>
+                        <div>256</div>
+                        <div style="color: #10b981;">已连接</div>
+                        <div class="instance-status">
+                            <div class="status-dot running"></div>
+                            运行中
+                        </div>
+                        <div class="quick-actions">
+                            <button class="quick-btn view">查看</button>
+                            <button class="quick-btn stop">停止</button>
+                        </div>
+                    </div>
+                    
+                    <div class="instance-item">
+                        <div>
+                            <div class="instance-name">保护测点模拟</div>
+                            <div style="font-size: 12px; color: #64748b;">ID: inst-protect-001</div>
+                        </div>
+                        <div>2405</div>
+                        <div>128</div>
+                        <div style="color: #10b981;">已连接</div>
+                        <div class="instance-status">
+                            <div class="status-dot running"></div>
+                            运行中
+                        </div>
+                        <div class="quick-actions">
+                            <button class="quick-btn view">查看</button>
+                            <button class="quick-btn stop">停止</button>
+                        </div>
+                    </div>
+                    
+                    <div class="instance-item">
+                        <div>
+                            <div class="instance-name">备用实例</div>
+                            <div style="font-size: 12px; color: #64748b;">ID: inst-backup-001</div>
+                        </div>
+                        <div>2406</div>
+                        <div>64</div>
+                        <div style="color: #64748b;">未连接</div>
+                        <div class="instance-status">
+                            <div class="status-dot stopped"></div>
+                            已停止
+                        </div>
+                        <div class="quick-actions">
+                            <button class="quick-btn view">查看</button>
+                            <button class="quick-btn start">启动</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Log Panel -->
+                <div class="log-panel">
+                    <div class="log-header">
+                        <span class="log-title">📋 实时日志 - inst-main-001-2404</span>
+                        <div style="display: flex; gap: 8px;">
+                            <span class="btn btn-ghost" style="padding: 4px 12px; font-size: 12px;">📥 下载</span>
+                            <span class="btn btn-ghost" style="padding: 4px 12px; font-size: 12px;">🗑️ 清除</span>
+                        </div>
+                    </div>
+                    <div class="log-content">
+                        <div>[2026-05-16 10:30:15.123] INFO: IEC104 服务端已启动, port=2404</div>
+                        <div>[2026-05-16 10:30:16.456] INFO: 客户端已连接, remote=192.168.1.50:54321</div>
+                        <div>[2026-05-16 10:30:17.789] INFO: 收到总召, qoi=20</div>
+                        <div>[2026-05-16 10:30:18.012] INFO: 总召完成, totalPoints=256</div>
+                        <div>[2026-05-16 10:31:00.123] INFO: 自动变化任务已启动, ioa=16385, strategy=increment</div>
+                        <div>[2026-05-16 10:31:01.234] INFO: 变化上送, ioa=16385, value=1.0</div>
+                        <div>[2026-05-16 10:31:02.345] INFO: 变化上送, ioa=16386, value=2.0</div>
+                        <div>[2026-05-16 10:31:15.678] INFO: 收到DO控制, ioa=100, value=true</div>
+                        <div>[2026-05-16 10:31:16.789] WARN: QDS无效, ioa=16387</div>
+                        <div>[2026-05-16 10:32:00.123] INFO: HTTP修改点值, ioa=16385, value=50.0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add Server Modal (Demo) -->
+        <div class="modal-overlay" v-if="showAddModal" @click="showAddModal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <span class="modal-title">添加子服务器</span>
+                    <button class="modal-close" @click="showAddModal = false">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">服务器名称</label>
+                        <input type="text" class="form-input" placeholder="例如：变电站A - 主控">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">IP地址</label>
+                        <input type="text" class="form-input" placeholder="例如：192.168.1.101">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">HTTP API 端口</label>
+                        <input type="text" class="form-input" placeholder="例如：8989">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">认证Token (可选)</label>
+                        <input type="text" class="form-input" placeholder="如果需要认证">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">标签</label>
+                        <input type="text" class="form-input" placeholder="例如：变电站A, 主控">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" @click="showAddModal = false">取消</button>
+                    <button class="btn btn-primary">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+        
+        const app = createApp({
+            setup() {
+                const showAddModal = ref(false);
+                
+                return { showAddModal };
+            }
+        });
+        
+        app.use(ElementPlus);
+        app.mount('#app');
+    </script>
+</body>
+</html>

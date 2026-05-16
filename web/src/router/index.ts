@@ -1,9 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import ConfigPage from '@/views/ConfigPage.vue'
 import MonitorPage from '@/views/MonitorPage.vue'
+import LoginPage from '@/views/LoginPage.vue'
+import { getToken } from '../api'
 
 const routes = [
   { path: '/', redirect: '/config' },
+  { path: '/login', name: 'login', component: LoginPage, meta: { title: '登录', public: true } },
   { path: '/config', name: 'config', component: ConfigPage, meta: { title: '配置管理' } },
   { path: '/monitor', name: 'monitor', component: MonitorPage, meta: { title: '运行监控' } },
   { path: '/trend', name: 'trend', component: () => import('@/views/TrendPage.vue'), meta: { title: '实时趋势' } },
@@ -13,6 +16,16 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+})
+
+// Navigation guard: redirect to login if not authenticated
+router.beforeEach((to, _from, next) => {
+  const token = getToken()
+  if (to.meta.public || token) {
+    next()
+  } else {
+    next('/login')
+  }
 })
 
 export default router

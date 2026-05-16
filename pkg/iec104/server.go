@@ -312,8 +312,10 @@ func (h *serverHandler) handleSingleCommand(c asdu.Connect, a *asdu.ASDU) error 
 	slog.Info("收到DO控制", "ioa", ioa, "value", cmd.Value)
 
 	pt, err := h.srv.store.SetBoolValue(ioa, cmd.Value)
-	if err != nil {
-		slog.Warn("DO控制更新失败", "ioa", ioa, "error", err)
+if err != nil {
+		slog.Warn("发送变化上送失败", "ioa", pt.IOA, "error", err)
+	} else {
+		slog.Debug("变化上送", "ioa", pt.IOA, "value", formatPointValue(pt))
 	}
 
 	if err := mirror.SendReplyMirror(c, asdu.ActivationTerm); err != nil {

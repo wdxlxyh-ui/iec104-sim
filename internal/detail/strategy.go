@@ -66,6 +66,7 @@ func (sr *strategyRunner) runOnce(cfg *model.AutoChangeConfig, state *strategySt
 type strategyState struct {
 	csvRows      []csvRow
 	csvIndex     int
+	csvMTime     int64
 	currentSOC   float64
 	currentEnergy float64
 }
@@ -109,7 +110,7 @@ func (sr *strategyRunner) doRandom(cfg *model.AutoChangeConfig) {
 }
 
 func (sr *strategyRunner) doCSV(cfg *model.AutoChangeConfig, state *strategyState) {
-	if len(state.csvRows) == 0 {
+	if !sr.ensureCSVRows(cfg, state) {
 		return
 	}
 	if state.csvIndex >= len(state.csvRows) {
@@ -129,6 +130,32 @@ func (sr *strategyRunner) doCSV(cfg *model.AutoChangeConfig, state *strategyStat
 	}
 	sr.store.SetValue(cfg.PointIOA, row.value)
 	sr.publisher.Publish(p)
+}
+
+func (sr *strategyRunner) ensureCSVRows(cfg *model.AutoChangeConfig, state *strategyState) bool {
+	csvPath := filepath.Join(sr.configDir, "csv", sr.instanceID, cfg.Params.CSVFileName)
+	if _, err := os.Stat(csvPath); os.IsNotExist(err) {
+		csvPath = filepath.Join(sr.configDir, "csv", cfg.Params.CSVFileName)
+	}
+
+	if state.csvRows != nil {
+		if info, err := os.Stat(csvPath); err == nil {
+			if info.ModTime().Unix() == state.csvMTime {
+				return true
+			}
+		}
+	}
+
+	state.csvRows = sr.loadCSVRows(cfg)
+	if state.csvRows == nil {
+		return false
+	}
+
+	if info, err := os.Stat(csvPath); err == nil {
+		state.csvMTime = info.ModTime().Unix()
+	}
+
+	return true
 }
 
 func (sr *strategyRunner) loadCSVRows(cfg *model.AutoChangeConfig) []csvRow {

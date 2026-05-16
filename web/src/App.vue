@@ -1,60 +1,107 @@
 <template>
-  <el-container style="height: 100vh; flex-direction: column">
-    <header class="app-header">
-      <div style="display: flex; align-items: center; gap: 12px">
-        <el-button text @click="sidebarCollapsed = !sidebarCollapsed" style="font-size: 18px; padding: 4px">
-          <el-icon><Fold /></el-icon>
-        </el-button>
-        <h2>IEC104 模拟器管理系统 <span style="font-size: 13px; font-weight: 400; color: var(--el-text-color-secondary)">v{{ version }}</span></h2>
-      </div>
-      <el-tag v-if="status" class="header-status-tag">
-        运行 {{ status.running }} / 总计 {{ status.configured }}
-      </el-tag>
-    </header>
-    <el-container style="height: calc(100vh - var(--header-height))">
-      <el-aside class="app-sidebar" :style="{ width: sidebarCollapsed ? '64px' : '200px' }"
-        @mouseenter="sidebarCollapsed = false" @mouseleave="sidebarCollapsed = true">
-        <el-menu :router="true" :default-active="currentRoute" :collapse="sidebarCollapsed">
-          <el-menu-item index="/config">
-            <el-icon><Setting /></el-icon>
-            <span>配置管理</span>
-          </el-menu-item>
-          <el-menu-item index="/monitor">
-            <el-icon><Monitor /></el-icon>
-            <span>运行监控</span>
-          </el-menu-item>
-          <el-menu-item index="/trend">
-            <el-icon><DataLine /></el-icon>
-            <span>实时趋势</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
-      <el-main class="app-main">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </el-main>
+  <template v-if="isLoginPage">
+    <router-view />
+  </template>
+  <template v-else>
+    <el-container style="height: 100vh; flex-direction: column">
+      <header class="app-header">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <el-button text @click="sidebarCollapsed = !sidebarCollapsed" style="font-size: 18px; padding: 4px">
+            <el-icon><Fold /></el-icon>
+          </el-button>
+          <h2>IEC104 模拟器管理系统 <span style="font-size: 13px; font-weight: 400; color: var(--el-text-color-secondary)">v{{ version }}</span></h2>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <el-tag v-if="status" class="header-status-tag">
+            运行 {{ status.running }} / 总计 {{ status.configured }}
+          </el-tag>
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <el-button text style="color: #94a3b8; font-size: 13px">
+              {{ username || '用户' }}
+              <el-icon><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </header>
+      <el-container style="height: calc(100vh - var(--header-height))">
+        <el-aside class="app-sidebar" :style="{ width: sidebarCollapsed ? '64px' : '200px' }"
+          @mouseenter="sidebarCollapsed = false" @mouseleave="sidebarCollapsed = true">
+          <el-menu :router="true" :default-active="currentRoute" :collapse="sidebarCollapsed">
+            <el-menu-item index="/config">
+              <el-icon><Setting /></el-icon>
+              <span>配置管理</span>
+            </el-menu-item>
+            <el-menu-item index="/monitor">
+              <el-icon><Monitor /></el-icon>
+              <span>运行监控</span>
+            </el-menu-item>
+            <el-menu-item index="/trend">
+              <el-icon><DataLine /></el-icon>
+              <span>实时趋势</span>
+            </el-menu-item>
+          </el-menu>
+        </el-aside>
+        <el-main class="app-main">
+          <router-view v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </el-main>
+      </el-container>
     </el-container>
-  </el-container>
+  </template>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { Setting, Monitor, DataLine, Fold } from '@element-plus/icons-vue'
-import { getStatus, type GlobalStatus } from './api'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Setting, Monitor, DataLine, Fold, ArrowDown } from '@element-plus/icons-vue'
+import { getStatus, clearToken, type GlobalStatus } from './api'
 
 const route = useRoute()
+const router = useRouter()
 const sidebarCollapsed = ref(true)
 const currentRoute = computed(() => {
   const path = route.path
   if (path.startsWith('/detail/')) return '/monitor'
   return path
 })
+const isLoginPage = computed(() => route.path === '/login')
 const status = ref<GlobalStatus | null>(null)
-const version = ref('2.2.0')
+const version = ref('2.3.0')
+const username = ref('')
+
+function updateUserFromToken() {
+  username.value = ''
+  try {
+    const raw = localStorage.getItem('iec104_auth_token')
+    if (!raw) return
+    const parts = raw.split('.')
+    if (parts.length !== 3) return
+    const payload = JSON.parse(atob(parts[1]))
+    if (payload.username) username.value = payload.username
+  } catch {
+    clearToken()
+  }
+}
+
+function handleUserCommand(cmd: string) {
+  if (cmd === 'logout') {
+    clearToken()
+    username.value = ''
+    router.push('/login')
+  }
+}
+
+// Re-check user info on every route change (covers login → redirect flow)
+watch(() => route.path, updateUserFromToken)
+updateUserFromToken()
 
 onMounted(async () => {
   try {

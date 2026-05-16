@@ -1,9 +1,76 @@
 import axios from 'axios'
 
+const STORAGE_KEY = 'iec104_auth_token'
+
 const http = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
 })
+
+// ── Auth token management ──────────────────────────────────────
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setToken(token: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, token)
+  } catch { /* ignore */ }
+}
+
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch { /* ignore */ }
+}
+
+// ── Axios request interceptor: attach Bearer token ─────────────
+
+http.interceptors.request.use((config) => {
+  const token = getToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// ── Axios response interceptor: handle 401 ─────────────────────
+
+http.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      clearToken()
+      if (!window.location.hash.includes('/login')) {
+        window.history.replaceState(null, '', '#/login')
+      }
+    }
+    return Promise.reject(error)
+  },
+)
+
+// ── Auth API ───────────────────────────────────────────────────
+
+export interface LoginResponse {
+  token: string
+  user: {
+    id: string
+    username: string
+    role: string
+  }
+}
+
+export async function login(username: string, password: string): Promise<LoginResponse> {
+  const res = await http.post('/auth/login', { username, password })
+  return res.data
+}
+
+// ── Shared types ───────────────────────────────────────────────
 
 export interface InstanceConfig {
   id?: string
@@ -104,6 +171,8 @@ export async function listFiles(): Promise<{ name: string; size: number; modtime
   return res.data.files
 }
 
+// ── Point types and snapshots ─────────────────────────────────
+
 export interface PointSnapshot {
   ioa: number
   name: string
@@ -163,6 +232,8 @@ export interface BatchAutoChangeRequest {
     params: StrategyParams
   }
 }
+
+// ── Detail page API (points, auto-change) ──────────────────────
 
 export async function getPoints(instanceId: string): Promise<PointsResponse> {
   const res = await http.get(`/instances/${instanceId}/points`)

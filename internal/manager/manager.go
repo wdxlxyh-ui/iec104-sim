@@ -35,10 +35,12 @@ type Instance struct {
 	Store      *library.Store
 	HTTPServer *http.Server
 	AutoEngine *detail.Engine
+	Logger     *InstanceLogger
 }
 
 // MaxInstances is the maximum number of concurrent instances allowed.
-const MaxInstances = 10
+// Set to 0 for unlimited (disabled check)
+const MaxInstances = 1000
 
 // Manager manages multiple IEC104 server instances.
 type Manager struct {
@@ -78,7 +80,7 @@ func (m *Manager) CreateConfig(cfg model.InstanceConfig) (model.InstanceConfig, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.store.Count() >= MaxInstances {
+	if MaxInstances > 0 && m.store.Count() >= MaxInstances {
 		return model.InstanceConfig{}, fmt.Errorf("maximum %d instances allowed", MaxInstances)
 	}
 
@@ -164,11 +166,17 @@ func (m *Manager) StartInstance(id string) error {
 		slog.Warn("自动变化引擎加载失败", "id", id, "error", err)
 	}
 
+	logger, err := NewInstanceLogger(m.cfgDir, cfg.ID, cfg.IEC104Port)
+	if err != nil {
+		slog.Warn("创建实例日志目录失败", "id", id, "error", err)
+	}
+
 	inst := &Instance{
 		Config:     cfg,
 		Server:     server,
 		Store:      store,
 		AutoEngine: engine,
+		Logger:     logger,
 	}
 
 	if cfg.HttpEnabled && cfg.HttpPort > 0 {
@@ -204,10 +212,17 @@ func (m *Manager) UpdateConfig(cfg model.InstanceConfig) error {
 	defer m.mu.Unlock()
 
 	if inst, ok := m.instances[cfg.ID]; ok {
+		oldPort := inst.Config.IEC104Port
 		inst.Server.Stop()
 		if inst.HTTPServer != nil {
 			inst.HTTPServer.Close()
 			inst.HTTPServer = nil
+		}
+		if inst.Logger != nil {
+			inst.Logger.Close()
+			if oldPort != cfg.IEC104Port {
+				RenameInstanceLogDir(m.cfgDir, cfg.ID, cfg.ID, oldPort, cfg.IEC104Port)
+			}
 		}
 		delete(m.instances, cfg.ID)
 	}
@@ -228,11 +243,20 @@ func (m *Manager) DeleteConfig(id string) error {
 			inst.HTTPServer.Close()
 			inst.HTTPServer = nil
 		}
+		if inst.Logger != nil {
+			inst.Logger.Close()
+			RemoveInstanceLogDir(m.cfgDir, inst.Config.ID, inst.Config.IEC104Port)
+		}
 		firewall.RemovePort(inst.Config.IEC104Port)
 		if inst.Config.HttpEnabled && inst.Config.HttpPort > 0 {
 			firewall.RemovePort(inst.Config.HttpPort)
 		}
 		delete(m.instances, id)
+	} else {
+		cfg, _ := m.store.Get(id)
+		if cfg.ID != "" {
+			RemoveInstanceLogDir(m.cfgDir, cfg.ID, cfg.IEC104Port)
+		}
 	}
 
 	return m.store.Delete(id)
@@ -254,6 +278,11 @@ func (m *Manager) StopInstance(id string) error {
 	if inst.HTTPServer != nil {
 		inst.HTTPServer.Close()
 		inst.HTTPServer = nil
+	}
+
+	if inst.Logger != nil {
+		inst.Logger.Close()
+		RemoveInstanceLogDir(m.cfgDir, inst.Config.ID, inst.Config.IEC104Port)
 	}
 
 	firewall.RemovePort(inst.Config.IEC104Port)

@@ -225,14 +225,27 @@ function onSvgMove(e:MouseEvent){
   const svg=e.currentTarget as SVGElement,rect=svg.getBoundingClientRect()
   const mx=(e.clientX-rect.left)*(SVG_W/rect.width)
   if(mx<padL||mx>padL+chartW){tooltip.show=false;return}
-  const maxPts=Math.floor(timeRange.value*60*1000/pollInterval.value),step=chartW/(Math.max(maxPts,1)-1)
-  const idx=Math.min(Math.round((mx-padL)/step),maxPts-1)
-  if(idx<0){tooltip.show=false;return}
-  const ptTime=new Date(Date.now()-(maxPts-1-idx)*(timeRange.value*60*1000/maxPts))
   const vals:{name:string;val:string}[]=[]
-  visibleTraces.value.forEach(t=>{const s=sliceData(t);if(idx<s.length)vals.push({name:`${t.inst}·${t.alias||t.name}`,val:s[idx].toFixed(1)})})
+  let tooltipTime = ''
+  visibleTraces.value.forEach(t=>{
+    const s=sliceData(t)
+    if(s.length<2)return
+    const totalW = chartW
+    const xStep = totalW / (s.length - 1)
+    const relX = mx - padL
+    const idx = Math.round(relX / xStep)
+    if(idx < 0 || idx >= s.length)return
+    const v = s[idx]
+    if(v===undefined || v===null)return
+    vals.push({name:`${t.inst}·${t.alias||t.name}`,val:typeof v==='number'?v.toFixed(1):String(v)})
+    if(!tooltipTime){
+      const msAgo = (s.length - 1 - idx) * pollInterval.value
+      tooltipTime = new Date(Date.now() - msAgo).toLocaleTimeString()
+    }
+  })
+  if(vals.length===0){tooltip.show=false;return}
   const p=svg.parentElement;if(p){const cr=p.getBoundingClientRect(),rx=e.clientX-cr.left+12,ry=e.clientY-cr.top-10;tooltip.style={left:`${Math.min(rx,cr.width-180)}px`,top:`${ry}px`}}
-  tooltip.time=ptTime.toLocaleTimeString();tooltip.vals=vals;tooltip.show=true
+  tooltip.time=tooltipTime;tooltip.vals=vals;tooltip.show=true
 }
 
 function lastValue(t:Trace):string{return t.data.length>0?t.data[t.data.length-1].toFixed(1):'--'}
@@ -241,21 +254,16 @@ function removeTrace(i:number){traces.value.splice(i,1);hiddenTraces.value=new S
 
 async function fetchAllPoints(){
   if(!traces.value.length)return
-  for(const t of traces.value){try{const pt=await readPoint(t.instId,t.ioa);t.data.push(pt.value??0);if(t.data.length>720)t.data.shift()}catch{}}
-  lastUpdate.value=new Date().toLocaleTimeString()
-  pointsCount.value=Math.min(Math.max(...traces.value.map(t=>t.data.length),0),Math.floor(timeRange.value*60*1000/pollInterval.value))
-}
-
-// Seed enough initial data so chart + tooltip work immediately for any time range
-function seedInitData() {
-  const ptsNeeded = Math.floor(60 * 60 * 1000 / pollInterval.value) // 1h max
-  traces.value.forEach(t => {
-    if (t.data.length > 0) return
-    for (let i = 0; i < ptsNeeded; i++) {
-      t.data.push(50 + Math.sin(i * 0.02) * 20 + Math.sin(i * 0.1) * 8 + (Math.random() - 0.5) * 5)
+  const fetches = traces.value.map(t => readPoint(t.instId,t.ioa).then(pt => ({t, v: pt.value??0})).catch(() => ({t, v: null})))
+  const results = await Promise.all(fetches)
+  results.forEach(r => {
+    if(r.v !== null) {
+      r.t.data.push(r.v)
+      if(r.t.data.length>720) r.t.data.shift()
     }
   })
-  lastUpdate.value = new Date().toLocaleTimeString()
+  lastUpdate.value=new Date().toLocaleTimeString()
+  pointsCount.value=Math.min(Math.max(...traces.value.map(t=>t.data.length),0),Math.floor(timeRange.value*60*1000/pollInterval.value))
 }
 
 function restartTimer() {
@@ -267,20 +275,37 @@ watch(pollInterval, restartTimer)
 
 onMounted(() => {
   loadFromLocal()
-  seedInitData()
   if (traces.value.length > 0) { fetchAllPoints() }
   pollTimer = setInterval(fetchAllPoints, pollInterval.value)
 })
 
 async function openDialog() {
-  try { const list = await listInstances(); allInstances.value = list.map(s => ({ id: s.id, name: s.name })) } catch {}
-  formInst.value = ''; formIoa.value = null; formAlias.value = ''; formPoints.value = []; dialogVisible.value = true
+  formInst.value = ''; formIoa.value = null; formAlias.value = ''; formPoints.value = []
+  try {
+    const list = await listInstances()
+    allInstances.value = list.map(s => ({ id: s.id, name: s.name }))
+    if (list.length === 0) {
+      ElMessage.warning('暂无可用实例，请先在配置管理页面添加并启动实例')
+    }
+  } catch (e: any) {
+    ElMessage.error('加载实例列表失败: ' + (e?.response?.data?.error || e.message || '未知错误'))
+    allInstances.value = []
+  }
+  dialogVisible.value = true
 }
 
 async function onInstChange() {
   formIoa.value = null; formPoints.value = []
   if (!formInst.value) return
-  try { const res = await getPoints(formInst.value); formPoints.value = res.points.filter(p => p.point_type !== 'AO' && p.point_type !== 'DO') } catch {}
+  try {
+    const res = await getPoints(formInst.value)
+    formPoints.value = res.points.filter(p => p.point_type !== 'AO' && p.point_type !== 'DO')
+    if (formPoints.value.length === 0) {
+      ElMessage.info('该实例没有可用的遥测/遥信/遥脉测点')
+    }
+  } catch (e: any) {
+    ElMessage.warning('加载测点失败，请确认实例已启动: ' + (e?.response?.data?.error || ''))
+  }
 }
 
 function addTrace() {

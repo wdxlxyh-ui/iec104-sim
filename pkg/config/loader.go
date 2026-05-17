@@ -8,7 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func LoadFromXLSX(path string) ([]*Point, error) {
+func LoadFromXLSX(path string, protocol string) ([]*Point, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open xlsx: %w", err)
@@ -109,14 +109,55 @@ func LoadFromXLSX(path string) ([]*Point, error) {
 			alias = strings.TrimSpace(row[6])
 		}
 
+		functionCode := uint8(0)
+		registerAddr := uint16(0)
+		byteOrder := "ABCD"
+
+		if len(row) > 7 {
+			if fcStr := strings.TrimSpace(row[7]); fcStr != "" {
+				fc, err := strconv.ParseUint(fcStr, 10, 8)
+				if err != nil {
+					return nil, fmt.Errorf("row %d: invalid function_code %q: %w", i+2, fcStr, err)
+				}
+				functionCode = uint8(fc)
+			}
+		}
+
+		if len(row) > 8 {
+			if raStr := strings.TrimSpace(row[8]); raStr != "" {
+				ra, err := strconv.ParseUint(raStr, 10, 16)
+				if err != nil {
+					return nil, fmt.Errorf("row %d: invalid register_address %q: %w", i+2, raStr, err)
+				}
+				registerAddr = uint16(ra)
+			}
+		}
+
+		if len(row) > 9 {
+			if boStr := strings.TrimSpace(row[9]); boStr != "" {
+				byteOrder = strings.ToUpper(boStr)
+			}
+		}
+
+		isModbus := protocol == "modbus_tcp" || protocol == "modbus_rtu"
+		if isModbus && functionCode == 0 {
+			return nil, fmt.Errorf("row %d: function_code is required for Modbus protocol", i+2)
+		}
+		if isModbus && registerAddr == 0 && functionCode != 0 {
+			return nil, fmt.Errorf("row %d: register_address is required for Modbus protocol", i+2)
+		}
+
 		p := &Point{
-			IOA:       uint32(ioa),
-			Name:      name,
-			ValueType: vt,
-			PointType: pt,
-			Efficient: efficient,
-			BaseValue: baseValue,
-			Alias:     alias,
+			IOA:             uint32(ioa),
+			Name:            name,
+			ValueType:       vt,
+			PointType:       pt,
+			Efficient:       efficient,
+			BaseValue:       baseValue,
+			Alias:           alias,
+			FunctionCode:    functionCode,
+			RegisterAddress: registerAddr,
+			ByteOrder:       byteOrder,
 		}
 
 		switch pt {

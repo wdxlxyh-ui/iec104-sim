@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IEC104 模拟器 v2.4 原型 — 多规约支持</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #333; }
+
+.app { display: flex; height: 100vh; }
+.sidebar { width: 200px; background: #f5f7fa; border-right: 1px solid #e4e7ed; padding-top: 20px; }
+.sidebar .logo { padding: 0 20px 20px; font-size: 16px; font-weight: 700; color: #409eff; border-bottom: 1px solid #e4e7ed; margin-bottom: 10px; }
+.sidebar .logo small { display: block; font-size: 11px; color: #999; font-weight: 400; margin-top: 2px; }
+.sidebar .menu-item { padding: 12px 20px; cursor: pointer; color: #666; font-size: 14px; border-left: 3px solid transparent; transition: .2s; }
+.sidebar .menu-item.active { background: #ecf5ff; color: #409eff; border-left-color: #409eff; font-weight: 600; }
+.sidebar .menu-item:hover { background: #f0f2f5; }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.header { height: 50px; background: #409eff; color: #fff; display: flex; align-items: center; padding: 0 20px; font-size: 16px; font-weight: 600; }
+.header .badge { margin-left: auto; font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 12px; }
+.content { flex: 1; padding: 20px; overflow-y: auto; }
+
+.card { background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; }
+.card-header { padding: 14px 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+.card-header h3 { font-size: 15px; font-weight: 600; }
+.card-body { padding: 16px 20px; }
+
+.btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 16px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; cursor: pointer; background: #fff; color: #333; transition: .2s; }
+.btn:hover { border-color: #409eff; color: #409eff; }
+.btn-primary { background: #409eff; border-color: #409eff; color: #fff; }
+.btn-primary:hover { background: #66b1ff; border-color: #66b1ff; color: #fff; }
+.btn-success { background: #67c23a; border-color: #67c23a; color: #fff; }
+.btn-success:hover { background: #85ce61; }
+.btn-warning { background: #e6a23c; border-color: #e6a23c; color: #fff; }
+.btn-warning:hover { background: #f0c78a; }
+.btn-danger { background: #f56c6c; border-color: #f56c6c; color: #fff; }
+.btn-danger:hover { background: #f78989; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #fafafa; padding: 10px 12px; text-align: left; font-weight: 600; color: #666; border-bottom: 2px solid #ebeef5; white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid #ebeef5; }
+tr:hover td { background: #f5f7fa; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+.tag-success { background: #e1f3d8; color: #67c23a; }
+.tag-danger { background: #fde2e2; color: #f56c6c; }
+.tag-info { background: #f4f4f5; color: #909399; }
+.tag-warning { background: #faecd8; color: #e6a23c; }
+.tag-primary { background: #ecf5ff; color: #409eff; }
+.tag-purple { background: #f2f0ff; color: #7c4dff; }
+
+.status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
+.status-dot.green { background: #67c23a; }
+.status-dot.red { background: #f56c6c; }
+.status-dot.gray { background: #909399; }
+
+/* Modal */
+.modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4); z-index: 1000; display: none; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 6px; width: 600px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+.modal-sm { width: 460px; }
+.modal-lg { width: 760px; }
+.modal-xl { width: 900px; }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 16px; }
+.modal-close { cursor: pointer; font-size: 20px; color: #999; line-height: 1; }
+.modal-close:hover { color: #333; }
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid #f0f0f0; display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Form */
+.form-group { margin-bottom: 16px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; font-weight: 500; }
+.form-label .required { color: #f56c6c; margin-right: 4px; }
+.form-input, .form-select { width: 100%; padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; outline: none; transition: .2s; }
+.form-input:focus, .form-select:focus { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64,158,255,0.1); }
+.form-input:disabled, .form-select:disabled { background: #f5f7fa; color: #c0c4cc; cursor: not-allowed; }
+.form-row { display: flex; gap: 12px; }
+.form-row .form-group { flex: 1; }
+.form-hint { font-size: 12px; color: #999; margin-top: 4px; }
+.form-hint.info { color: #409eff; }
+
+/* Toggle Switch */
+.toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-switch .slider { position: absolute; cursor: pointer; top:0; left:0; right:0; bottom:0; background: #dcdfe6; border-radius: 20px; transition: .3s; }
+.toggle-switch .slider::before { content: ''; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px; background: #fff; border-radius: 50%; transition: .3s; }
+.toggle-switch input:checked + .slider { background: #67c23a; }
+.toggle-switch input:checked + .slider::before { transform: translateX(16px); }
+
+/* Tab */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid #e4e7ed; margin-bottom: 16px; }
+.tab-item { padding: 10px 16px; font-size: 13px; cursor: pointer; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: .2s; }
+.tab-item:hover { color: #409eff; }
+.tab-item.active { color: #409eff; border-bottom-color: #409eff; font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Alert */
+.alert { padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 8px; }
+.alert-info { background: #ecf5ff; border: 1px solid #d9ecff; color: #409eff; }
+.alert-warning { background: #fdf6ec; border: 1px solid #faecd8; color: #e6a23c; }
+.alert-success { background: #f0f9eb; border: 1px solid #e1f3d8; color: #67c23a; }
+.alert-icon { font-size: 16px; flex-shrink: 0; }
+
+/* Protocol Icon */
+.proto-icon { display: inline-flex; align-items: center; gap: 6px; }
+.proto-icon .dot { width: 8px; height: 8px; border-radius: 50%; }
+.proto-icon .dot.iec104 { background: #409eff; }
+.proto-icon .dot.modbus-tcp { background: #67c23a; }
+.proto-icon .dot.modbus-rtu { background: #e6a23c; }
+
+/* Breadcrumb */
+.breadcrumb { font-size: 13px; color: #999; margin-bottom: 16px; }
+.breadcrumb span { cursor: pointer; }
+.breadcrumb span:hover { color: #409eff; }
+.breadcrumb .sep { margin: 0 8px; color: #ccc; }
+
+/* Toast */
+.toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: #67c23a; color: #fff; border-radius: 4px; font-size: 13px; z-index: 2000; display: none; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+.toast.show { display: block; animation: toastIn .3s ease; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* Detail page styles */
+.detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.detail-header h2 { font-size: 18px; }
+.detail-meta { display: flex; gap: 16px; font-size: 13px; color: #666; }
+.detail-meta .meta-item { display: flex; align-items: center; gap: 4px; }
+
+/* Protocol selector visual */
+.protocol-cards { display: flex; gap: 12px; margin-bottom: 16px; }
+.protocol-card { flex: 1; border: 2px solid #e4e7ed; border-radius: 8px; padding: 16px; cursor: pointer; transition: .2s; text-align: center; }
+.protocol-card:hover { border-color: #409eff; background: #f5f7fa; }
+.protocol-card.selected { border-color: #409eff; background: #ecf5ff; }
+.protocol-card .proto-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.protocol-card .proto-desc { font-size: 12px; color: #999; }
+.protocol-card .proto-icon-big { font-size: 24px; margin-bottom: 8px; }
+
+/* Serial params */
+.serial-params { background: #fafafa; border: 1px solid #e4e7ed; border-radius: 4px; padding: 16px; margin-top: 12px; }
+.serial-params h4 { font-size: 13px; color: #666; margin-bottom: 12px; }
+
+/* Template table */
+.template-table { font-size: 12px; margin-top: 8px; }
+.template-table th { background: #f5f7fa; font-size: 11px; padding: 6px 8px; }
+.template-table td { padding: 6px 8px; font-size: 11px; }
+.template-table .col-new { background: #fef0f0; color: #f56c6c; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="logo">IEC104 模拟器<small>v2.4 多规约版</small></div>
+    <div class="menu-item active" onclick="showPage('config')">📋 实例配置</div>
+    <div class="menu-item" onclick="showPage('detail')">📊 实例详情</div>
+    <div class="menu-item" onclick="showPage('monitor')">📡 运行监控</div>
+    <div class="menu-item" onclick="showPage('trend')">📈 趋势分析</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="header">
+      <span id="pageTitle">实例配置</span>
+      <span class="badge">v2.4.0-dev</span>
+    </div>
+    <div class="content" id="content">
+      <!-- Page content injected by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Add/Edit Instance Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="modalTitle">添加实例</h3>
+      <span class="modal-close" onclick="closeModal('addModal')">&times;</span>
+    </div>
+    <div class="modal-body">
+      <!-- Protocol Selection -->
+      <div class="form-group">
+        <label class="form-label"><span class="required">*</span>规约类型</label>
+        <div class="protocol-cards">
+          <div class="protocol-card selected" onclick="selectProtocol('iec104', this)" data-proto="iec104">
+            <div class="proto-icon-big">⚡</div>
+            <div class="proto-name">IEC 60870-5-104</div>
+            <div class="proto-desc">TCP/IP, 端口 2404</div>
+          </div>
+          <div class="protocol-card" onclick="selectProtocol('modbus_tcp', this)" data-proto="modbus_tcp">
+            <div class="proto-icon-big">🔌</div>
+            <div class="proto-name">Modbus TCP</div>
+            <div class="proto-desc">TCP/IP, 端口 502</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Basic Config -->
+      <div class="form-group">
+        <label class="form-label"><span class="required">*</span>实例名称</label>
+        <input class="form-input" id="instName" placeholder="例如: 变电站A / Modbus设备1" />
+      </div>
+
+      <!-- IEC104 Port (default) -->
+      <div class="form-group" id="portGroupIec104">
+        <label class="form-label"><span class="required">*</span>IEC104 端口</label>
+        <input type="number" class="form-input" id="iec104Port" value="2404" min="1024" max="65535" />
+        <div class="form-hint">IEC 60870-5-104 服务端 TCP 端口</div>
+      </div>
+
+      <!-- Modbus TCP Port -->
+      <div class="form-group" id="portGroupModbusTcp" style="display:none">
+        <label class="form-label"><span class="required">*</span>Modbus TCP 端口</label>
+        <input type="number" class="form-input" id="modbusTcpPort" value="502" min="1" max="65535" />
+        <div class="form-hint">Modbus TCP 默认端口 502，可自定义</div>
+      </div>
+      <div class="form-group" id="modbusExtraGroup" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">从站地址</label>
+            <input type="number" class="form-input" id="slaveId" value="1" min="1" max="247" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">字节序</label>
+            <select class="form-select" id="byteOrder">
+              <option value="ABCD" selected>ABCD (Big-Endian)</option>
+              <option value="CDAB">CDAB (Little-Endian)</option>
+              <option value="BADC">BADC (Byte-Swapped)</option>
+              <option value="DCBA">DCBA (Word-Swapped)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- XLSX File -->
+      <div class="form-group">
+        <label class="form-label"><span class="required">*</span>点表文件</label>
+        <select class="form-select" id="xlsxFile">
+          <option value="">请选择或上传点表文件</option>
+          <option value="substation_a.xlsx">substation_a.xlsx</option>
+          <option value="modbus_device1.xlsx">modbus_device1.xlsx</option>
+        </select>
+        <div class="form-hint" id="xlsxHint">IEC104 格式: 名称 | IOA | 数据类型 | 测点类型 | 系数 | 基值 | 别名</div>
+      </div>
+
+      <!-- File Upload -->
+      <div class="form-group">
+        <label class="form-label">上传新文件</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-primary btn-sm" onclick="simulateUpload()">📁 选择 Excel 文件</button>
+          <span id="uploadStatus" style="font-size:12px;color:#999;">支持 .xlsx 格式</span>
+        </div>
+      </div>
+
+      <!-- HTTP API -->
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+          HTTP 接口
+          <label class="toggle-switch">
+            <input type="checkbox" id="httpEnabled" checked onchange="toggleHttpPort()" />
+            <span class="slider"></span>
+          </label>
+          <span style="font-size:12px;color:#999;">启用后可通过 API 修改测点值</span>
+        </label>
+      </div>
+      <div class="form-group" id="httpPortGroup">
+        <label class="form-label">HTTP 端口</label>
+        <input type="number" class="form-input" id="httpPort" value="8081" min="1024" max="65535" />
+      </div>
+
+      <!-- Protocol-specific template info -->
+      <div class="alert alert-info" id="templateAlert">
+        <span class="alert-icon">ℹ️</span>
+        <div>
+          <strong>IEC104 点表列格式：</strong>
+          名称 | IOA | 数据类型 | 测点类型(AI/DI/PI/DO/AO) | 系数 | 基值 | 别名
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('addModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveInstance()">创建实例</button>
+    </div>
+  </div>
+</div>
+
+<!-- Point Detail Modal (for detail page) -->
+<div class="modal-overlay" id="pointDetailModal">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <h3 id="pointDetailTitle">测点详情 — 变电站A (IEC104)</h3>
+      <span class="modal-close" onclick="closeModal('pointDetailModal')">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="table-wrap">
+        <table id="pointDetailTable">
+          <thead>
+            <tr>
+              <th><input type="checkbox" onclick="toggleAllCheckboxes(this)" /></th>
+              <th>IOA</th>
+              <th>测点名称</th>
+              <th>类型</th>
+              <th>当前值</th>
+              <th>更新时间</th>
+              <th id="thFunctionCode" style="display:none">功能码</th>
+              <th id="thRegisterAddr" style="display:none">寄存器地址</th>
+              <th id="thByteOrder" style="display:none">字节序</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="pointDetailBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('pointDetailModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───
+let currentProtocol = 'iec104';
+let currentPage = 'config';
+let editingInstance = null;
+
+const instances = [
+  { id: 'a1b2c3', name: '220kV变电站A', protocol: 'iec104', port: 2404, xlsx: 'substation_a.xlsx', http: true, httpPort: 8081, status: 'running', clients: true, points: 150, uptime: 7200 },
+  { id: 'd4e5f6', name: 'Modbus温度采集器', protocol: 'modbus_tcp', port: 502, xlsx: 'modbus_device1.xlsx', http: true, httpPort: 8082, status: 'running', clients: true, points: 64, uptime: 3600 },
+];
+
+const modbusPoints = [
+  { ioa: 1, name: 'A相电压', type: 'AI', value: 220.5, fc: '04', addr: 30001, byteOrder: 'ABCD', time: '14:32:01' },
+  { ioa: 2, name: 'B相电压', type: 'AI', value: 219.8, fc: '04', addr: 30003, byteOrder: 'ABCD', time: '14:32:01' },
+  { ioa: 3, name: 'C相电压', type: 'AI', value: 221.2, fc: '04', addr: 30005, byteOrder: 'ABCD', time: '14:32:01' },
+  { ioa: 4, name: 'A相电流', type: 'AI', value: 12.5, fc: '04', addr: 30007, byteOrder: 'ABCD', time: '14:32:01' },
+  { ioa: 5, name: '断路器状态', type: 'DI', value: true, fc: '02', addr: 10001, byteOrder: '-', time: '14:32:00' },
+  { ioa: 6, name: '隔离开关状态', type: 'DI', value: false, fc: '02', addr: 10002, byteOrder: '-', time: '14:31:55' },
+  { ioa: 7, name: '有功功率设定', type: 'AO', value: 500.0, fc: '03', addr: 40001, byteOrder: 'ABCD', time: '14:30:00' },
+  { ioa: 8, name: '遥控开关1', type: 'DO', value: false, fc: '01', addr: 1, byteOrder: '-', time: '14:29:00' },
+  { ioa: 9, name: '累计电量', type: 'PI', value: 12345, fc: '04', addr: 30009, byteOrder: 'ABCD', time: '14:32:01' },
+];
+
+const iec104Points = [
+  { ioa: 16385, name: '母线电压', type: 'AI', value: 220.5, time: '14:32:01' },
+  { ioa: 16386, name: '线路电流', type: 'AI', value: 125.3, time: '14:32:01' },
+  { ioa: 1, name: '断路器1', type: 'DI', value: true, time: '14:32:00' },
+  { ioa: 2, name: '断路器2', type: 'DI', value: false, time: '14:31:55' },
+  { ioa: 30001, name: '总电量', type: 'PI', value: 98765, time: '14:32:01' },
+];
+
+// ─── Page Rendering ───
+function showPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  const titles = { config: '实例配置', detail: '实例详情', monitor: '运行监控', trend: '趋势分析' };
+  document.getElementById('pageTitle').textContent = titles[page];
+  
+  const content = document.getElementById('content');
+  
+  if (page === 'config') content.innerHTML = renderConfigPage();
+  else if (page === 'detail') content.innerHTML = renderDetailPage();
+  else if (page === 'monitor') content.innerHTML = renderMonitorPage();
+  else if (page === 'trend') content.innerHTML = renderTrendPage();
+}
+
+function renderConfigPage() {
+  return `
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:16px;font-weight:600">实例配置</span>
+        <div>
+          <button class="btn" onclick="showToast('刷新成功')">🔄 刷新</button>
+          <button class="btn btn-primary" onclick="openAddModal()">➕ 添加实例</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>名称</th>
+              <th>规约</th>
+              <th>端口/串口</th>
+              <th>点表文件</th>
+              <th>状态</th>
+              <th>统计</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${instances.map(inst => `
+              <tr>
+                <td style="font-family:monospace;font-size:12px">${inst.id.substring(0,6)}</td>
+                <td><strong>${inst.name}</strong></td>
+                <td>${protocolTag(inst.protocol)}</td>
+                <td><code style="background:#f5f7fa;padding:2px 6px;border-radius:3px;font-size:12px">${inst.port}</code></td>
+                <td>${inst.xlsx}</td>
+                <td>${statusTag(inst.status)}</td>
+                <td style="font-size:12px;color:#666">
+                  ${inst.status === 'running' ? `
+                    <span class="status-dot ${inst.clients ? 'green' : 'red'}"></span>${inst.clients ? '在线' : '离线'} |
+                    测点: ${inst.points} |
+                    运行: ${Math.floor(inst.uptime/3600)}h${Math.floor((inst.uptime%3600)/60)}m
+                  ` : '<span style="color:#999">-</span>'}
+                </td>
+                <td>
+                  <div class="btn-group">
+                    ${inst.status === 'running' 
+                      ? `<button class="btn btn-warning btn-sm" onclick="showToast('已停止: ${inst.name}')">停止</button>`
+                      : `<button class="btn btn-success btn-sm" onclick="showToast('已启动: ${inst.name}')">启动</button>`}
+                    <button class="btn btn-sm" onclick="openEditModal('${inst.id}')">编辑</button>
+                    <button class="btn btn-sm" onclick="openPointDetail('${inst.id}')">详情</button>
+                    <button class="btn btn-danger btn-sm" onclick="showToast('已删除: ${inst.name}')">删除</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderDetailPage() {
+  return `
+    <div class="breadcrumb">
+      <span onclick="showPage('config')">实例配置</span>
+      <span class="sep">/</span>
+      <span>Modbus温度采集器</span>
+    </div>
+    <div class="detail-header">
+      <h2>🔌 Modbus温度采集器</h2>
+      <span class="tag tag-success">运行中</span>
+      <span class="tag tag-purple">Modbus TCP</span>
+    </div>
+    <div class="detail-meta">
+      <div class="meta-item">📡 端口: <strong>502</strong></div>
+      <div class="meta-item">📊 测点: <strong>64</strong></div>
+      <div class="meta-item">👥 客户端: <strong style="color:#67c23a">在线</strong></div>
+      <div class="meta-item">⏱ 运行: <strong>1h0m</strong></div>
+    </div>
+    
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <h3>测点列表</h3>
+        <div class="btn-group">
+          <button class="btn btn-sm" onclick="showToast('刷新成功')">🔄 刷新</button>
+          <button class="btn btn-sm btn-primary" onclick="openPointDetail('d4e5f6')">📋 批量置数</button>
+          <button class="btn btn-sm" onclick="showToast('已导出')">📥 导出CSV</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>IOA</th>
+                <th>测点名称</th>
+                <th>类型</th>
+                <th>功能码</th>
+                <th>寄存器地址</th>
+                <th>字节序</th>
+                <th>当前值</th>
+                <th>更新时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${modbusPoints.map(p => `
+                <tr>
+                  <td style="font-family:monospace">${p.ioa}</td>
+                  <td>${p.name}</td>
+                  <td>${typeTag(p.type)}</td>
+                  <td><code style="background:#fef0f0;padding:2px 6px;border-radius:3px;font-size:12px;color:#f56c6c;font-weight:600">${p.fc}</code></td>
+                  <td><code style="background:#f5f7fa;padding:2px 6px;border-radius:3px;font-size:12px">${p.addr}</code></td>
+                  <td>${p.byteOrder}</td>
+                  <td><strong>${typeof p.value === 'boolean' ? (p.value ? 'ON' : 'OFF') : p.value}</strong></td>
+                  <td style="color:#999;font-size:12px">${p.time}</td>
+                  <td><button class="btn btn-sm btn-primary" onclick="openSetValueModal(${p.ioa}, '${p.name}', '${p.type}')">置数</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMonitorPage() {
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h3>全局运行状态</h3>
+        <button class="btn btn-sm" onclick="showToast('刷新成功')">🔄 刷新</button>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
+          <div style="background:#ecf5ff;padding:16px;border-radius:8px;text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#409eff">3</div>
+            <div style="font-size:13px;color:#666;margin-top:4px">配置实例</div>
+          </div>
+          <div style="background:#f0f9eb;padding:16px;border-radius:8px;text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#67c23a">2</div>
+            <div style="font-size:13px;color:#666;margin-top:4px">运行中</div>
+          </div>
+          <div style="background:#f4f4f5;padding:16px;border-radius:8px;text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#909399">0</div>
+            <div style="font-size:13px;color:#666;margin-top:4px">已停止</div>
+          </div>
+          <div style="background:#faecd8;padding:16px;border-radius:8px;text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#e6a23c">214</div>
+            <div style="font-size:13px;color:#666;margin-top:4px">总测点数</div>
+          </div>
+        </div>
+        
+        <h4 style="margin-bottom:12px">规约分布</h4>
+        <div style="display:flex;gap:12px;margin-bottom:20px">
+          <div style="flex:1;padding:12px;border:1px solid #e4e7ed;border-radius:6px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span class="status-dot green"></span>
+              <strong>IEC 60870-5-104</strong>
+            </div>
+            <div style="font-size:13px;color:#666">1 个实例 · 150 测点</div>
+          </div>
+          <div style="flex:1;padding:12px;border:1px solid #e4e7ed;border-radius:6px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span class="status-dot green"></span>
+              <strong>Modbus TCP</strong>
+            </div>
+            <div style="font-size:13px;color:#666">1 个实例 · 64 测点</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTrendPage() {
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h3>趋势分析</h3>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          <span class="alert-icon">ℹ️</span>
+          <div>趋势分析功能与规约无关，所有规约实例的测点数据均可在此查看趋势。</div>
+        </div>
+        <div style="text-align:center;padding:60px;color:#999">
+          <div style="font-size:48px;margin-bottom:16px">📈</div>
+          <div>选择实例和测点后显示趋势图</div>
+          <div style="font-size:12px;margin-top:8px">支持多测点对比、时间范围选择、数据导出</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Helpers ───
+function protocolTag(proto) {
+  const map = {
+    iec104: '<span class="tag tag-primary"><span class="status-dot green"></span>IEC104</span>',
+    modbus_tcp: '<span class="tag tag-success"><span class="status-dot green"></span>Modbus TCP</span>',
+  };
+  return map[proto] || '<span class="tag tag-info">未知</span>';
+}
+
+function statusTag(status) {
+  if (status === 'running') return '<span class="tag tag-success">运行中</span>';
+  if (status === 'error') return '<span class="tag tag-danger">错误</span>';
+  return '<span class="tag tag-info">已停止</span>';
+}
+
+function typeTag(type) {
+  const map = {
+    AI: '<span class="tag tag-primary">AI 遥测</span>',
+    DI: '<span class="tag tag-success">DI 遥信</span>',
+    PI: '<span class="tag tag-warning">PI 遥脉</span>',
+    DO: '<span class="tag tag-danger">DO 遥控</span>',
+    AO: '<span class="tag tag-purple">AO 遥调</span>',
+  };
+  return map[type] || type;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ─── Modal ───
+function openAddModal() {
+  editingInstance = null;
+  document.getElementById('modalTitle').textContent = '添加实例';
+  document.getElementById('instName').value = '';
+  document.getElementById('addModal').classList.add('show');
+  selectProtocol('iec104', document.querySelector('.protocol-card[data-proto="iec104"]'));
+}
+
+function openEditModal(id) {
+  const inst = instances.find(i => i.id === id);
+  if (!inst) return;
+  editingInstance = inst;
+  document.getElementById('modalTitle').textContent = '编辑实例';
+  document.getElementById('instName').value = inst.name;
+  document.getElementById('addModal').classList.add('show');
+  selectProtocol(inst.protocol, document.querySelector(`.protocol-card[data-proto="${inst.protocol}"]`));
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function selectProtocol(proto, el) {
+  currentProtocol = proto;
+  document.querySelectorAll('.protocol-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  
+  // Show/hide port groups
+  document.getElementById('portGroupIec104').style.display = proto === 'iec104' ? 'block' : 'none';
+  document.getElementById('portGroupModbusTcp').style.display = proto === 'modbus_tcp' ? 'block' : 'none';
+  document.getElementById('modbusExtraGroup').style.display = proto === 'modbus_tcp' ? 'block' : 'none';
+  
+  // Update xlsx hint
+  const hint = document.getElementById('xlsxHint');
+  const alert = document.getElementById('templateAlert');
+  
+  if (proto === 'iec104') {
+    hint.textContent = 'IEC104 格式: 名称 | IOA | 数据类型 | 测点类型 | 系数 | 基值 | 别名';
+    alert.className = 'alert alert-info';
+    alert.innerHTML = '<span class="alert-icon">ℹ️</span><div><strong>IEC104 点表列格式：</strong>名称 | IOA | 数据类型 | 测点类型(AI/DI/PI/DO/AO) | 系数 | 基值 | 别名</div>';
+  } else if (proto === 'modbus_tcp') {
+    hint.textContent = 'Modbus 格式: 名称 | IOA | 数据类型 | 测点类型 | 系数 | 基值 | 别名 | 功能码 | 寄存器地址 | 字节序';
+    alert.className = 'alert alert-warning';
+    alert.innerHTML = '<span class="alert-icon">⚠️</span><div><strong>Modbus TCP 点表需要额外列：</strong><br>功能码 (01-06/15/16) | 寄存器地址 (0-65535) | 字节序 (ABCD/CDAB/BADC/DCBA)<br><a href="#" onclick="showTemplateModal();return false" style="color:#e6a23c">查看完整列说明 →</a></div>';
+  }
+}
+
+function toggleHttpPort() {
+  const enabled = document.getElementById('httpEnabled').checked;
+  document.getElementById('httpPortGroup').style.display = enabled ? 'block' : 'none';
+}
+
+function simulateUpload() {
+  document.getElementById('uploadStatus').innerHTML = '<span style="color:#67c23a">✅ modbus_new_device.xlsx 已上传</span>';
+  showToast('文件上传成功');
+}
+
+function saveInstance() {
+  const name = document.getElementById('instName').value;
+  if (!name) {
+    showToast('请输入实例名称');
+    return;
+  }
+  closeModal('addModal');
+  showToast(`实例 "${name}" 已创建 (${currentProtocol})`);
+}
+
+// ─── Point Detail ───
+function openPointDetail(id) {
+  const inst = instances.find(i => i.id === id);
+  if (!inst) return;
+  
+  const protoLabel = { iec104: 'IEC104', modbus_tcp: 'Modbus TCP' };
+  document.getElementById('pointDetailTitle').textContent = `测点详情 — ${inst.name} (${protoLabel[inst.protocol]})`;
+  
+  const isModbus = inst.protocol.startsWith('modbus');
+  document.getElementById('thFunctionCode').style.display = isModbus ? '' : 'none';
+  document.getElementById('thRegisterAddr').style.display = isModbus ? '' : 'none';
+  document.getElementById('thByteOrder').style.display = isModbus ? '' : 'none';
+  
+  const points = isModbus ? modbusPoints : iec104Points;
+  const tbody = document.getElementById('pointDetailBody');
+  tbody.innerHTML = points.map(p => `
+    <tr>
+      <td><input type="checkbox" /></td>
+      <td style="font-family:monospace">${p.ioa}</td>
+      <td>${p.name}</td>
+      <td>${typeTag(p.type)}</td>
+      ${isModbus ? `
+        <td><code style="background:#fef0f0;padding:2px 6px;border-radius:3px;font-size:12px;color:#f56c6c;font-weight:600">${p.fc}</code></td>
+        <td><code style="background:#f5f7fa;padding:2px 6px;border-radius:3px;font-size:12px">${p.addr}</code></td>
+        <td>${p.byteOrder}</td>
+      ` : ''}
+      <td><strong>${typeof p.value === 'boolean' ? (p.value ? 'ON' : 'OFF') : p.value}</strong></td>
+      <td style="color:#999;font-size:12px">${p.time}</td>
+      <td><button class="btn btn-sm btn-primary" onclick="openSetValueModal(${p.ioa}, '${p.name}', '${p.type}')">置数</button></td>
+    </tr>
+  `).join('');
+  
+  document.getElementById('pointDetailModal').classList.add('show');
+}
+
+function toggleAllCheckboxes(master) {
+  document.querySelectorAll('#pointDetailBody input[type="checkbox"]').forEach(cb => cb.checked = master.checked);
+}
+
+function openSetValueModal(ioa, name, type) {
+  const value = prompt(`设置测点 "${name}" (IOA: ${ioa}, 类型: ${type}) 的值:`, type === 'DI' || type === 'DO' ? 'true' : '0');
+  if (value !== null) {
+    showToast(`已设置 ${name} = ${value}`);
+  }
+}
+
+function showTemplateModal() {
+  alert(`Modbus 点表完整列格式:
+
+A列: point-name    — 测点名称 (必填)
+B列: point-number  — 内部ID (必填, 用于系统唯一标识)
+C列: value-type    — 数据类型: FLOAT/DOUBLE/INT/BIT (必填)
+D列: point-type    — 测点类型: AI/DI/PI/DO/AO (必填)
+E列: efficient     — 系数因子 (必填)
+F列: base-value    — 初始值 (必填)
+G列: alias         — 别名/描述 (可选)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 以下为 Modbus 新增列 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+H列: function-code — 功能码: 01/02/03/04/05/06/15/16 (Modbus必填)
+I列: register-addr — 寄存器地址: 0-65535 (Modbus必填)
+J列: byte-order    — 字节序: ABCD/CDAB/BADC/DCBA (可选, 默认ABCD)
+
+功能码说明:
+  01 — Read Coils (读线圈, DO用)
+  02 — Read Discrete Inputs (读离散输入, DI用)
+  03 — Read Holding Registers (读保持寄存器, AO用)
+  04 — Read Input Registers (读输入寄存器, AI/PI用)
+  05 — Write Single Coil (写单个线圈, DO用)
+  06 — Write Single Register (写单个寄存器, AO用)
+  15 — Write Multiple Coils (写多个线圈)
+  16 — Write Multiple Registers (写多个寄存器)`);
+}
+
+// ─── Init ───
+document.getElementById('content').innerHTML = renderConfigPage();
+</script>
+</body>
+</html>

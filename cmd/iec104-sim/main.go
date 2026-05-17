@@ -26,6 +26,7 @@ import (
 	"iec104-sim/pkg/iec104"
 	"iec104-sim/pkg/library"
 	"iec104-sim/pkg/middleware"
+	"iec104-sim/pkg/protocol"
 
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/bcrypt"
@@ -65,7 +66,7 @@ func runLegacyMode() {
 	setupLogLevel(logLvl)
 	slog.Info("启动模拟器 (传统模式)", "port", port, "config", cfgPath, "http", httpAddr)
 
-	points, err := config.LoadFromXLSX(cfgPath)
+	points, err := config.LoadFromXLSX(cfgPath, "")
 	if err != nil {
 		slog.Error("加载配置文件失败", "error", err)
 		os.Exit(1)
@@ -190,6 +191,7 @@ func (ws *webServer) registerRoutes(mux *http.ServeMux, configDir string) {
 	mux.HandleFunc("/api/v1/status", ws.handleStatus)
 	mux.HandleFunc("/api/v1/upload", ws.handleUpload)
 	mux.HandleFunc("/api/v1/files", ws.handleFiles)
+	mux.HandleFunc("/api/v1/protocols", ws.handleProtocols)
 
 	// Serve static frontend if built
 	if _, err := os.Stat(webDir); err == nil {
@@ -302,6 +304,9 @@ func (ws *webServer) handleInstanceByID(w http.ResponseWriter, r *http.Request) 
 			}
 			if req.XLSXFile == "" {
 				req.XLSXFile = existing.XLSXFile
+			}
+			if req.Protocol == "" {
+				req.Protocol = existing.Protocol
 			}
 			if !req.HttpEnabled && req.HttpPort == 0 {
 				req.HttpPort = existing.HttpPort
@@ -502,7 +507,6 @@ func (ws *webServer) handleFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	// 扫描 configDir 下的 .xlsx 文件
 	entries, err := os.ReadDir(ws.cfgDir)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"files": []interface{}{}})
@@ -530,18 +534,31 @@ func (ws *webServer) handleFiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"files": files})
 }
 
+func (ws *webServer) handleProtocols(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"protocols": protocol.SupportedProtocols()})
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 func instanceStateToMap(s *model.InstanceState) map[string]interface{} {
+	proto := s.Config.Protocol
+	if proto == "" {
+		proto = "iec104"
+	}
 	m := map[string]interface{}{
-		"id":          s.Config.ID,
-		"name":        s.Config.Name,
-		"iec104_port": s.Config.IEC104Port,
-		"xlsx_file":   s.Config.XLSXFile,
-		"enabled":     s.Config.Enabled,
+		"id":           s.Config.ID,
+		"name":         s.Config.Name,
+		"iec104_port":  s.Config.IEC104Port,
+		"xlsx_file":    s.Config.XLSXFile,
+		"enabled":      s.Config.Enabled,
 		"http_enabled": s.Config.HttpEnabled,
 		"http_port":    s.Config.HttpPort,
-		"status":      string(s.Status),
+		"protocol":     proto,
+		"status":       string(s.Status),
 	}
 	if s.Status == model.StatusRunning {
 		m["stats"] = map[string]interface{}{
@@ -563,7 +580,15 @@ func validateConfig(cfg model.InstanceConfig) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("name is required")
 	}
-	if cfg.IEC104Port < 1 || cfg.IEC104Port > 65535 {
+	proto := cfg.Protocol
+	if proto == "" {
+		proto = "iec104"
+	}
+	port := cfg.IEC104Port
+	if proto == "modbus_tcp" && cfg.ModbusConfig != nil && cfg.ModbusConfig.Port > 0 {
+		port = cfg.ModbusConfig.Port
+	}
+	if port < 1 || port > 65535 {
 		return fmt.Errorf("port must be 1-65535")
 	}
 	if cfg.XLSXFile == "" {

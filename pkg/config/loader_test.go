@@ -52,7 +52,7 @@ func TestLoadFromXLSX_ValidFile(t *testing.T) {
 		t.Fatalf("failed to create test xlsx: %v", err)
 	}
 
-	points, err := LoadFromXLSX(xlsxPath)
+	points, err := LoadFromXLSX(xlsxPath, "")
 	if err != nil {
 		t.Fatalf("LoadFromXLSX failed: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestLoadFromXLSX_DuplicateIOA(t *testing.T) {
 
 	f.SaveAs(xlsxPath)
 
-	_, err := LoadFromXLSX(xlsxPath)
+	_, err := LoadFromXLSX(xlsxPath, "")
 	if err == nil {
 		t.Error("expected error for duplicate IOA, got nil")
 	}
@@ -140,7 +140,7 @@ func TestLoadFromXLSX_InvalidPointType(t *testing.T) {
 
 	f.SaveAs(xlsxPath)
 
-	_, err := LoadFromXLSX(xlsxPath)
+	_, err := LoadFromXLSX(xlsxPath, "")
 	if err == nil {
 		t.Error("expected error for unknown point-type, got nil")
 	}

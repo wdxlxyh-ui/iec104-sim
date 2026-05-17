@@ -57,6 +57,21 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column v-if="isModbus" label="功能码" width="80">
+            <template #default="{ row }">
+              <el-tag size="small" type="danger" effect="plain">{{ row.function_code || '-' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="isModbus" label="寄存器地址" width="110">
+            <template #default="{ row }">
+              <span style="font-size:12px">{{ row.register_address ?? '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="isModbus" label="字节序" width="80">
+            <template #default="{ row }">
+              <span style="font-size:12px">{{ row.byte_order || 'ABCD' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="实时值" width="110">
             <template #default="{ row }">
               <span style="font-weight: 600; font-size: 14px">
@@ -405,6 +420,8 @@ const instanceId = computed(() => route.params.id as string)
 
 const instanceName = ref('')
 const instanceStatus = ref('')
+const instanceProtocol = ref('iec104')
+const isModbus = computed(() => instanceProtocol.value === 'modbus_tcp')
 const points = ref<PointSnapshot[]>([])
 const refreshRate = ref(200)
 const pollingEnabled = ref(true)
@@ -991,9 +1008,11 @@ async function loadInstanceState() {
     const state: InstanceState = await getInstance(instanceId.value)
     instanceName.value = state.name
     instanceStatus.value = state.status
+    instanceProtocol.value = state.protocol || 'iec104'
   } catch {
     instanceName.value = instanceId.value
     instanceStatus.value = 'stopped'
+    instanceProtocol.value = 'iec104'
   }
 }
 

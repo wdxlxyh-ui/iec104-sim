@@ -157,3 +157,27 @@ func (s *Store) TotalCount() int {
 	defer s.mu.RUnlock()
 	return len(s.points)
 }
+
+func (s *Store) GetByFunctionCodeAndAddress(fc uint8, addr uint16) (*config.Point, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, p := range s.points {
+		if p.FunctionCode == fc && p.RegisterAddress == addr {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("no point found for FC=%d, Addr=%d", fc, addr)
+}
+
+func (s *Store) GetByFunctionCodeRange(fc uint8, startAddr uint16, count uint16) []*config.Point {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []*config.Point
+	endAddr := startAddr + count
+	for _, p := range s.points {
+		if p.FunctionCode == fc && p.RegisterAddress >= startAddr && p.RegisterAddress < endAddr {
+			result = append(result, p)
+		}
+	}
+	return result
+}

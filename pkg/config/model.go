@@ -43,4 +43,8 @@ type Point struct {
 	Alias     string            `json:"alias"`
 	Timestamp time.Time         `json:"timestamp"`
 	Changed   bool              `json:"-"`
+
+	FunctionCode    uint8  `json:"function_code,omitempty"`
+	RegisterAddress uint16 `json:"register_address,omitempty"`
+	ByteOrder       string `json:"byte_order,omitempty"`
 }

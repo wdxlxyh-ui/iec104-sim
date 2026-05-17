@@ -5,6 +5,12 @@ const http = axios.create({
   timeout: 10000,
 })
 
+export interface ModbusConfig {
+  port?: number
+  byte_order?: string
+  slave_id?: number
+}
+
 export interface InstanceConfig {
   id?: string
   name: string
@@ -13,6 +19,8 @@ export interface InstanceConfig {
   enabled?: boolean
   http_enabled?: boolean
   http_port?: number
+  protocol?: string
+  modbus_config?: ModbusConfig
 }
 
 export interface InstanceStats {
@@ -32,6 +40,7 @@ export interface InstanceState {
   enabled: boolean
   http_enabled?: boolean
   http_port?: number
+  protocol?: string
   status: 'running' | 'stopped' | 'error'
   stats?: InstanceStats
   error?: string
@@ -113,6 +122,9 @@ export interface PointSnapshot {
   int_value: number
   updated_at: string
   unit: string
+  function_code?: number
+  register_address?: number
+  byte_order?: string
 }
 
 export interface PointsResponse {
@@ -225,4 +237,9 @@ export async function uploadCSV(instanceId: string, file: File): Promise<any> {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return res.data
+}
+
+export async function getProtocols(): Promise<string[]> {
+  const res = await http.get('/protocols')
+  return res.data.protocols
 }

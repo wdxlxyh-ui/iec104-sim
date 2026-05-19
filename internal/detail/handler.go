@@ -729,6 +729,10 @@ func pointToSnapshot(p *config.Point) model.PointSnapshot {
 		IntValue:  p.IntValue,
 		UpdatedAt: p.Timestamp,
 		Unit:      "",
+
+		FunctionCode:    p.FunctionCode,
+		RegisterAddress: p.RegisterAddress,
+		ByteOrder:       p.ByteOrder,
 	}
 }
 

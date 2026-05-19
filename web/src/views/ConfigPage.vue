@@ -163,7 +163,7 @@ const rules = {
 
 const xlsxHint = computed(() => {
   if (form.value.protocol === 'modbus_tcp') {
-    return 'Modbus 格式: 名称 | IOA | 数据类型 | 测点类型 | 系数 | 基值 | 别名 | 功能码 | 寄存器地址 | 字节序'
+    return 'Modbus 格式: 名称 | IOA | 类型 | 类型 | 系数 | 基值 | 别名 | 寄存器地址 | 功能码 | 数据类型 | (额外列自动忽略)'
   }
   return 'IEC104 格式: 名称 | IOA | 数据类型 | 测点类型 | 系数 | 基值 | 别名'
 })

@@ -153,9 +153,9 @@ func (s *ModbusTCPServer) handleConnection(conn net.Conn) {
 			return
 		}
 
-		unitID := pdu[0]
-		functionCode := pdu[1]
-		data := pdu[2:]
+		unitID := mbap[6]
+		functionCode := pdu[0]
+		data := pdu[1:]
 
 		_ = unitID
 

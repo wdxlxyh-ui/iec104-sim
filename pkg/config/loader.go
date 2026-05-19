@@ -113,18 +113,12 @@ func LoadFromXLSX(path string, protocol string) ([]*Point, error) {
 		registerAddr := uint16(0)
 		byteOrder := "ABCD"
 
+		// Modbus TCP 格式列顺序: register-address, function-code, value-type(可忽略), group-number, call-interval, user-defined-rule
+		// 列7 (index 7): register-address
+		// 列8 (index 8): function-code
+		// 列9-12: group-number, call-interval, user-defined-rule (忽略)
 		if len(row) > 7 {
-			if fcStr := strings.TrimSpace(row[7]); fcStr != "" {
-				fc, err := strconv.ParseUint(fcStr, 10, 8)
-				if err != nil {
-					return nil, fmt.Errorf("row %d: invalid function_code %q: %w", i+2, fcStr, err)
-				}
-				functionCode = uint8(fc)
-			}
-		}
-
-		if len(row) > 8 {
-			if raStr := strings.TrimSpace(row[8]); raStr != "" {
+			if raStr := strings.TrimSpace(row[7]); raStr != "" {
 				ra, err := strconv.ParseUint(raStr, 10, 16)
 				if err != nil {
 					return nil, fmt.Errorf("row %d: invalid register_address %q: %w", i+2, raStr, err)
@@ -133,11 +127,17 @@ func LoadFromXLSX(path string, protocol string) ([]*Point, error) {
 			}
 		}
 
-		if len(row) > 9 {
-			if boStr := strings.TrimSpace(row[9]); boStr != "" {
-				byteOrder = strings.ToUpper(boStr)
+		if len(row) > 8 {
+			if fcStr := strings.TrimSpace(row[8]); fcStr != "" {
+				fc, err := strconv.ParseUint(fcStr, 10, 8)
+				if err != nil {
+					return nil, fmt.Errorf("row %d: invalid function_code %q: %w", i+2, fcStr, err)
+				}
+				functionCode = uint8(fc)
 			}
 		}
+
+		// 列9-12 (index 9-12): 忽略 group-number, call-interval, user-defined-rule
 
 		isModbus := protocol == "modbus_tcp" || protocol == "modbus_rtu"
 		if isModbus && functionCode == 0 {

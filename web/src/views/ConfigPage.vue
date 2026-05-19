@@ -15,9 +15,14 @@
       <el-table v-else :data="instances" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="90" />
         <el-table-column prop="name" label="名称" min-width="140" />
-        <el-table-column label="IEC104 端口" width="120">
+        <el-table-column label="规约" width="120">
           <template #default="{ row }">
-            <el-tag>{{ row.iec104_port }}</el-tag>
+            <el-tag :type="protoTagType(row.protocol)">{{ protoLabel(row.protocol) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="端口" width="100">
+          <template #default="{ row }">
+            <el-tag>{{ displayPort(row) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="xlsx_file" label="点表文件" min-width="160" />
@@ -57,17 +62,35 @@
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="showAddDialog" :title="editing ? '编辑实例' : '添加实例'" width="500px">
+    <el-dialog v-model="showAddDialog" :title="editing ? '编辑实例' : '添加实例'" width="560px">
       <el-form :model="form" label-width="110px" :rules="rules" ref="formRef">
+        <el-form-item label="规约类型" prop="protocol">
+          <el-radio-group v-model="form.protocol">
+            <el-radio-button value="iec104">IEC104</el-radio-button>
+            <el-radio-button value="modbus_tcp">Modbus TCP</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="实例名称" prop="name">
           <el-input v-model="form.name" placeholder="例如: 变电站A" />
         </el-form-item>
-        <el-form-item label="IEC104端口" prop="iec104_port">
-          <el-input-number v-model="form.iec104_port" :min="1024" :max="65535" style="width: 100%" />
+        <el-form-item :label="form.protocol === 'modbus_tcp' ? 'Modbus端口' : 'IEC104端口'" prop="iec104_port">
+          <el-input-number v-model="form.iec104_port" :min="1" :max="65535" style="width: 100%" />
         </el-form-item>
         <el-form-item label="点表文件" prop="xlsx_file">
           <el-select v-model="form.xlsx_file" placeholder="选择或上传文件" style="width: 100%" allow-create filterable>
             <el-option v-for="f in availableFiles" :key="f.name" :label="f.name" :value="f.name" />
+          </el-select>
+          <div class="form-hint" style="font-size:12px;color:#999;margin-top:4px">{{ xlsxHint }}</div>
+        </el-form-item>
+        <el-form-item v-if="form.protocol === 'modbus_tcp'" label="从站地址">
+          <el-input-number v-model="modbusSlaveId" :min="1" :max="247" style="width: 100%" />
+        </el-form-item>
+        <el-form-item v-if="form.protocol === 'modbus_tcp'" label="字节序">
+          <el-select v-model="modbusByteOrder" style="width: 100%">
+            <el-option label="ABCD (Big-Endian)" value="ABCD" />
+            <el-option label="CDAB (Little-Endian)" value="CDAB" />
+            <el-option label="BADC (Byte-Swapped)" value="BADC" />
+            <el-option label="DCBA (Word-Swapped)" value="DCBA" />
           </el-select>
         </el-form-item>
         <el-form-item label="HTTP接口">
@@ -126,13 +149,24 @@ const form = ref<InstanceConfig>({
   xlsx_file: '',
   http_enabled: false,
   http_port: 8081,
+  protocol: 'iec104',
 })
+
+const modbusSlaveId = ref(1)
+const modbusByteOrder = ref('ABCD')
 
 const rules = {
   name: [{ required: true, message: '请输入实例名称', trigger: 'blur' }],
   iec104_port: [{ required: true, message: '请填写端口号', trigger: 'blur' }],
   xlsx_file: [{ required: true, message: '请选择点表文件', trigger: 'change' }],
 }
+
+const xlsxHint = computed(() => {
+  if (form.value.protocol === 'modbus_tcp') {
+    return 'Modbus 格式: 名称 | IOA | 类型 | 类型 | 系数 | 基值 | 别名 | 寄存器地址 | 功能码 | 数据类型 | (额外列自动忽略)'
+  }
+  return 'IEC104 格式: 名称 | IOA | 数据类型 | 测点类型 | 系数 | 基值 | 别名'
+})
 
 async function fetchData() {
   loading.value = true
@@ -160,7 +194,10 @@ function handleEdit(row: InstanceState) {
     xlsx_file: row.xlsx_file,
     http_enabled: row.http_enabled ?? false,
     http_port: row.http_port ?? 8081,
+    protocol: row.protocol || 'iec104',
   }
+  modbusSlaveId.value = 1
+  modbusByteOrder.value = 'ABCD'
   showAddDialog.value = true
 }
 
@@ -170,12 +207,19 @@ async function handleSave() {
 
   saving.value = true
   try {
+    const data: InstanceConfig = { ...form.value }
+    if (data.protocol === 'modbus_tcp') {
+      data.modbus_config = {
+        port: data.iec104_port,
+        slave_id: modbusSlaveId.value,
+        byte_order: modbusByteOrder.value,
+      }
+    }
     if (editing.value) {
-      await updateInstance(form.value.id!, form.value)
+      await updateInstance(data.id!, data)
       ElMessage.success('已更新')
     } else {
-      // Don't send empty id to backend; backend auto-generates
-      const { id, ...createData } = form.value
+      const { id, ...createData } = data
       await createInstance(createData)
       ElMessage.success('已创建')
     }
@@ -251,8 +295,25 @@ async function handleUploadFirst() {
 
 function resetForm() {
   editing.value = false
-  form.value = { name: '', iec104_port: 2404, xlsx_file: '', http_enabled: false, http_port: 8081 }
+  form.value = { name: '', iec104_port: 2404, xlsx_file: '', http_enabled: false, http_port: 8081, protocol: 'iec104' }
+  modbusSlaveId.value = 1
+  modbusByteOrder.value = 'ABCD'
   selectedFile.value = null
+}
+
+function protoLabel(proto?: string): string {
+  if (proto === 'modbus_tcp') return 'Modbus TCP'
+  return 'IEC104'
+}
+
+function protoTagType(proto?: string): 'success' | 'primary' | 'info' {
+  if (proto === 'modbus_tcp') return 'success'
+  return 'primary'
+}
+
+function displayPort(row: InstanceState): string {
+  if (row.protocol === 'modbus_tcp' && row.iec104_port) return String(row.iec104_port)
+  return String(row.iec104_port)
 }
 
 function fmtUptime(s: number): string {

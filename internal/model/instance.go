@@ -9,6 +9,15 @@ type InstanceConfig struct {
 	Enabled     bool   `json:"enabled"`
 	HttpEnabled bool   `json:"http_enabled"`
 	HttpPort    int    `json:"http_port"`
+
+	Protocol     string                `json:"protocol,omitempty"`
+	ModbusConfig *ModbusInstanceConfig `json:"modbus_config,omitempty"`
+}
+
+type ModbusInstanceConfig struct {
+	Port      int    `json:"port,omitempty"`
+	ByteOrder string `json:"byte_order,omitempty"`
+	SlaveID   uint8  `json:"slave_id,omitempty"`
 }
 
 // InstanceStatus represents the runtime status of an instance.

@@ -18,8 +18,8 @@ import (
 	"iec104-sim/pkg/api"
 	"iec104-sim/pkg/config"
 	"iec104-sim/pkg/firewall"
-	"iec104-sim/pkg/iec104"
 	"iec104-sim/pkg/library"
+	"iec104-sim/pkg/protocol"
 )
 
 func generateID() string {
@@ -28,10 +28,10 @@ func generateID() string {
 	return hex.EncodeToString(b)
 }
 
-// Instance wraps a running IEC104 server instance.
+// Instance wraps a running protocol server instance.
 type Instance struct {
 	Config     model.InstanceConfig
-	Server     *iec104.Server
+	Protocol   protocol.Protocol
 	Store      *library.Store
 	HTTPServer *http.Server
 	AutoEngine *detail.Engine
@@ -148,20 +148,27 @@ func (m *Manager) StartInstance(id string) error {
 		}
 	}
 
-	points, err := config.LoadFromXLSX(xlsxPath)
+	points, err := config.LoadFromXLSX(xlsxPath, cfg.Protocol)
 	if err != nil {
 		return fmt.Errorf("load xlsx: %w", err)
 	}
 
 	store := library.NewStore(points)
-	server := iec104.NewServer(cfg.IEC104Port, store)
-	if err := server.Start(); err != nil {
-		return fmt.Errorf("start iec104 server: %w", err)
+
+	proto, err := protocol.New(cfg)
+	if err != nil {
+		return fmt.Errorf("create protocol: %w", err)
+	}
+	proto.SetStore(store)
+	if err := proto.Start(); err != nil {
+		return fmt.Errorf("start protocol: %w", err)
 	}
 
 	acStore := detail.NewAutoChangeStore(m.cfgDir)
-	engine := detail.NewEngine(cfg.ID, store, server, acStore, m.cfgDir, m)
-	server.SetAOFollowHandler(engine.HandleAOFollow)
+	engine := detail.NewEngine(cfg.ID, store, proto, acStore, m.cfgDir, m)
+	if p, ok := proto.(interface{ SetAOFollowHandler(func(aoIOA uint32)) }); ok {
+		p.SetAOFollowHandler(engine.HandleAOFollow)
+	}
 	if err := engine.LoadAndStart(); err != nil {
 		slog.Warn("自动变化引擎加载失败", "id", id, "error", err)
 	}
@@ -173,14 +180,14 @@ func (m *Manager) StartInstance(id string) error {
 
 	inst := &Instance{
 		Config:     cfg,
-		Server:     server,
+		Protocol:   proto,
 		Store:      store,
 		AutoEngine: engine,
 		Logger:     logger,
 	}
 
 	if cfg.HttpEnabled && cfg.HttpPort > 0 {
-		apiHandler := api.NewHandler(store, server, server)
+		apiHandler := api.NewHandler(store, proto, proto)
 		detailHandler := detail.NewDetailHandler(cfg.ID, store, engine, m.cfgDir)
 		httpMux := http.NewServeMux()
 		apiHandler.Register(httpMux)
@@ -213,7 +220,7 @@ func (m *Manager) UpdateConfig(cfg model.InstanceConfig) error {
 
 	if inst, ok := m.instances[cfg.ID]; ok {
 		oldPort := inst.Config.IEC104Port
-		inst.Server.Stop()
+		inst.Protocol.Stop()
 		if inst.HTTPServer != nil {
 			inst.HTTPServer.Close()
 			inst.HTTPServer = nil
@@ -235,7 +242,7 @@ func (m *Manager) DeleteConfig(id string) error {
 	defer m.mu.Unlock()
 
 	if inst, ok := m.instances[id]; ok {
-		inst.Server.Stop()
+		inst.Protocol.Stop()
 		if inst.AutoEngine != nil {
 			inst.AutoEngine.StopAll()
 		}
@@ -271,7 +278,7 @@ func (m *Manager) StopInstance(id string) error {
 		return fmt.Errorf("instance %s not running", id)
 	}
 
-	inst.Server.Stop()
+	inst.Protocol.Stop()
 	if inst.AutoEngine != nil {
 		inst.AutoEngine.StopAll()
 	}
@@ -346,12 +353,12 @@ func (m *Manager) GetState(id string) (*model.InstanceState, error) {
 		Status: model.StatusStopped,
 	}
 
-	if inst, running := m.instances[id]; running && inst.Server != nil {
+	if inst, running := m.instances[id]; running && inst.Protocol != nil {
 		state.Status = model.StatusRunning
-		state.UptimeSeconds = inst.Server.Uptime()
+		state.UptimeSeconds = inst.Protocol.Uptime()
 		state.TotalPoints = inst.Store.TotalCount()
-		state.ClientConnected = inst.Server.ClientConnected()
-		interrog, control, spont := inst.Server.Stats()
+		state.ClientConnected = inst.Protocol.ClientConnected()
+		interrog, control, spont := inst.Protocol.Stats()
 		state.Interrogations = interrog
 		state.Controls = control
 		state.Spontaneous = spont
@@ -373,12 +380,12 @@ func (m *Manager) ListStates() []*model.InstanceState {
 			Config: cfg,
 			Status: model.StatusStopped,
 		}
-		if inst, ok := m.instances[cfg.ID]; ok && inst.Server != nil {
+		if inst, ok := m.instances[cfg.ID]; ok && inst.Protocol != nil {
 			state.Status = model.StatusRunning
-			state.UptimeSeconds = inst.Server.Uptime()
+			state.UptimeSeconds = inst.Protocol.Uptime()
 			state.TotalPoints = inst.Store.TotalCount()
-			state.ClientConnected = inst.Server.ClientConnected()
-			interrog, control, spont := inst.Server.Stats()
+			state.ClientConnected = inst.Protocol.ClientConnected()
+			interrog, control, spont := inst.Protocol.Stats()
 			state.Interrogations = interrog
 			state.Controls = control
 			state.Spontaneous = spont
@@ -402,7 +409,7 @@ func (m *Manager) StopAll() {
 	defer m.mu.Unlock()
 
 	for id, inst := range m.instances {
-		inst.Server.Stop()
+		inst.Protocol.Stop()
 		if inst.AutoEngine != nil {
 			inst.AutoEngine.StopAll()
 		}

@@ -67,13 +67,15 @@ type strategyState struct {
 	csvRows      []csvRow
 	csvIndex     int
 	csvMTime     int64
+	csvStartTime time.Time
 	currentSOC   float64
 	currentEnergy float64
 }
 
 type csvRow struct {
-	delay time.Duration
-	value float64
+	delay   time.Duration
+	absTime time.Time
+	value   float64
 }
 
 func (sr *strategyRunner) doIncrement(cfg *model.AutoChangeConfig, state *strategyState) {
@@ -113,23 +115,46 @@ func (sr *strategyRunner) doCSV(cfg *model.AutoChangeConfig, state *strategyStat
 	if !sr.ensureCSVRows(cfg, state) {
 		return
 	}
-	if state.csvIndex >= len(state.csvRows) {
-		if strings.EqualFold(cfg.Params.TimeFormat, "absolute") {
-			return
-		}
-		state.csvIndex = 0
-	}
-	row := state.csvRows[state.csvIndex]
-	state.csvIndex++
-	if state.csvIndex >= len(state.csvRows) && strings.EqualFold(cfg.Params.TimeFormat, "absolute") {
-		state.csvIndex = len(state.csvRows)
-	}
-	p, ok := sr.store.Get(cfg.PointIOA)
-	if !ok {
+	if len(state.csvRows) == 0 {
 		return
 	}
-	sr.store.SetValue(cfg.PointIOA, row.value)
-	sr.publisher.Publish(p)
+
+	if state.csvStartTime.IsZero() {
+		state.csvStartTime = time.Now()
+		state.csvIndex = 0
+	}
+
+	elapsed := time.Since(state.csvStartTime)
+	isAbsolute := strings.EqualFold(cfg.Params.TimeFormat, "absolute")
+
+	for state.csvIndex < len(state.csvRows) {
+		row := state.csvRows[state.csvIndex]
+		var apply bool
+		if isAbsolute {
+			apply = !time.Now().Before(row.absTime)
+		} else {
+			apply = elapsed >= row.delay
+		}
+		if apply {
+			p, ok := sr.store.Get(cfg.PointIOA)
+			if !ok {
+				return
+			}
+			sr.store.SetValue(cfg.PointIOA, row.value)
+			sr.publisher.Publish(p)
+			state.csvIndex++
+		} else {
+			break
+		}
+	}
+
+	if state.csvIndex >= len(state.csvRows) {
+		if isAbsolute {
+			return
+		}
+		state.csvStartTime = time.Now()
+		state.csvIndex = 0
+	}
 }
 
 func (sr *strategyRunner) ensureCSVRows(cfg *model.AutoChangeConfig, state *strategyState) bool {
@@ -179,7 +204,6 @@ func (sr *strategyRunner) loadCSVRows(cfg *model.AutoChangeConfig) []csvRow {
 	var result []csvRow
 	if strings.EqualFold(cfg.Params.TimeFormat, "absolute") {
 		now := time.Now()
-		startIdx := -1
 		for i := 1; i < len(rows); i++ {
 			if len(rows[i]) < 2 {
 				continue
@@ -193,13 +217,7 @@ func (sr *strategyRunner) loadCSVRows(cfg *model.AutoChangeConfig) []csvRow {
 			if err != nil {
 				continue
 			}
-			result = append(result, csvRow{value: val})
-			if startIdx < 0 && !rowTime.Before(now) {
-				startIdx = len(result) - 1
-			}
-		}
-		if startIdx > 0 {
-			result = append(result[startIdx:], result[:startIdx]...)
+			result = append(result, csvRow{absTime: rowTime, value: val})
 		}
 	} else {
 		for i := 1; i < len(rows); i++ {

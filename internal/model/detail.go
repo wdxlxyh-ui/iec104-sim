@@ -62,4 +62,8 @@ type PointSnapshot struct {
 	IntValue  int32     `json:"int_value"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Unit      string    `json:"unit"`
+
+	FunctionCode    uint8  `json:"function_code,omitempty"`
+	RegisterAddress uint16 `json:"register_address,omitempty"`
+	ByteOrder       string `json:"byte_order,omitempty"`
 }

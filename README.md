@@ -141,6 +141,8 @@ go build -o bin/iec104-sim ./cmd/iec104-sim/
 
 格式：`.xlsx`，工作表名称 `point`。
 
+### 标准格式（IEC 104）
+
 | 列 | 表头 | 类型 | 必填 | 说明 |
 |--------|--------|------|----------|-------------|
 | A | point-name | string | 是 | 测点名称，如"母线电压" |
@@ -150,6 +152,22 @@ go build -o bin/iec104-sim ./cmd/iec104-sim/
 | E | efficient | float64 | 是 | 系数 |
 | F | base-value | float64 | 是 | 初始值 |
 | G | alias | string | 否 | 别名或描述 |
+
+### 扩展格式（Modbus TCP 复用）
+
+支持从 Modbus 客户端工具导出的点表，直接复用。额外列会被自动忽略。
+
+| 列 | 表头 | 说明 |
+|--------|--------|------|
+| A-G | 同标准格式 | 基础测点定义 |
+| H | register-address | Modbus 寄存器地址 |
+| I | function-code | Modbus 功能码（1/3/4/5/6/16） |
+| J | value-type | Modbus 数据类型（BIT/FLOAT/DOUBLE） |
+| K | group-number | 客户端分组（忽略） |
+| L | call-interval | 客户端轮询间隔（忽略） |
+| M | user-defined-rule | 自定义规则（忽略） |
+
+**示例**：Modbus 客户端导出的点表可直接使用，模拟器自动忽略多余列。
 
 ### 测点类型说明
 

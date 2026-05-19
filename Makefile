@@ -1,6 +1,21 @@
 PROJECT   := iec104-sim
-VERSION   := 2.2.0
-LDFLAGS   := -ldflags="-s -w -X main.version=$(VERSION)"
+VERSION   := $(shell \
+  if git describe --tags --exact-match >/dev/null 2>&1; then \
+    git describe --tags | sed 's/^v//'; \
+  else \
+    TAG=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); \
+    COMMITS=$$(git rev-list --count $$(git describe --tags --abbrev=0 2>/dev/null)..HEAD 2>/dev/null); \
+    HASH=$$(git rev-parse --short HEAD 2>/dev/null); \
+    if [ -n "$$TAG" ]; then \
+      echo "$${TAG}-dev+$${COMMITS}.$$HASH"; \
+    else \
+      echo "0.0.0-dev+$$HASH"; \
+    fi; \
+  fi)
+DIST_VERSION := $(shell echo "$(VERSION)" | tr '+' '-')
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+LDFLAGS   := -ldflags="-s -w -X main.version=$(VERSION) -X main.gitCommit=$(GIT_COMMIT) -X main.gitBranch=$(GIT_BRANCH)"
 DIST_DIR  := dist
 BIN_DIR   := bin
 
@@ -59,67 +74,67 @@ dist: web-build build-all
 	@echo "=== 打包三平台发行包 ==="
 	@echo ""
 	# Linux amd64
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources
-	cp $(BIN_DIR)/$(PROJECT) $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/$(PROJECT)
-	cp $(BIN_DIR)/iec104-mcp $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/iec104-mcp
-	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/
-	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/bin/*.sh
-	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/config/instances.json
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/logs/.gitkeep
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/resources/.gitkeep
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/bin
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/config
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/logs
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/resources
+	cp $(BIN_DIR)/$(PROJECT) $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/bin/$(PROJECT)
+	cp $(BIN_DIR)/iec104-mcp $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/bin/iec104-mcp
+	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/bin/
+	chmod +x $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/bin/*.sh
+	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/config/instances.json
+	touch $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/logs/.gitkeep
+	touch $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/resources/.gitkeep
 	@if [ -d web/dist ]; then \
-		mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/web/dist && \
-		cp -r web/dist/* $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64/web/dist/; \
+		mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/web/dist && \
+		cp -r web/dist/* $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64/web/dist/; \
 	fi
-	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(VERSION)-linux-amd64.tar.gz $(PROJECT)-v$(VERSION)-linux-amd64/
-	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64
-	@echo "  ✔ $(PROJECT)-v$(VERSION)-linux-amd64.tar.gz"
+	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(DIST_VERSION)-linux-amd64.tar.gz $(PROJECT)-v$(DIST_VERSION)-linux-amd64/
+	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64
+	@echo "  ✔ $(PROJECT)-v$(DIST_VERSION)-linux-amd64.tar.gz"
 	# Linux arm64
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/logs
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/resources
-	cp $(BIN_DIR)/$(PROJECT)-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/$(PROJECT)
-	cp $(BIN_DIR)/iec104-mcp-arm64 $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/iec104-mcp
-	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/
-	chmod +x $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/bin/*.sh
-	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/config/instances.json
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/logs/.gitkeep
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/resources/.gitkeep
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/bin
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/config
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/logs
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/resources
+	cp $(BIN_DIR)/$(PROJECT)-arm64 $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/bin/$(PROJECT)
+	cp $(BIN_DIR)/iec104-mcp-arm64 $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/bin/iec104-mcp
+	cp scripts/start.sh scripts/stop.sh scripts/restart.sh $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/bin/
+	chmod +x $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/bin/*.sh
+	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/config/instances.json
+	touch $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/logs/.gitkeep
+	touch $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/resources/.gitkeep
 	@if [ -d web/dist ]; then \
-		mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/web/dist && \
-		cp -r web/dist/* $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64/web/dist/; \
+		mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/web/dist && \
+		cp -r web/dist/* $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64/web/dist/; \
 	fi
-	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(VERSION)-linux-arm64.tar.gz $(PROJECT)-v$(VERSION)-linux-arm64/
-	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64
-	@echo "  ✔ $(PROJECT)-v$(VERSION)-linux-arm64.tar.gz"
+	cd $(DIST_DIR) && tar czf $(PROJECT)-v$(DIST_VERSION)-linux-arm64.tar.gz $(PROJECT)-v$(DIST_VERSION)-linux-arm64/
+	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64
+	@echo "  ✔ $(PROJECT)-v$(DIST_VERSION)-linux-arm64.tar.gz"
 	# Windows amd64 (zip)
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/scripts
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/config
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/logs
-	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/resources
-	cp $(BIN_DIR)/$(PROJECT).exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/$(PROJECT).exe
-	cp $(BIN_DIR)/iec104-mcp.exe $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/bin/iec104-mcp.exe
-	cp scripts/start.bat scripts/stop.bat scripts/restart.bat $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/scripts/
-	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/config/instances.json
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/logs/.gitkeep
-	touch $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/resources/.gitkeep
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/bin
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/scripts
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/config
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/logs
+	mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/resources
+	cp $(BIN_DIR)/$(PROJECT).exe $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/bin/$(PROJECT).exe
+	cp $(BIN_DIR)/iec104-mcp.exe $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/bin/iec104-mcp.exe
+	cp scripts/start.bat scripts/stop.bat scripts/restart.bat $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/scripts/
+	echo '[]' > $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/config/instances.json
+	touch $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/logs/.gitkeep
+	touch $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/resources/.gitkeep
 	@if [ -d web/dist ]; then \
-		mkdir -p $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/web/dist && \
-		cp -r web/dist/* $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64/web/dist/; \
+		mkdir -p $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/web/dist && \
+		cp -r web/dist/* $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64/web/dist/; \
 	fi
-	cd $(DIST_DIR) && zip -rq $(PROJECT)-v$(VERSION)-windows-amd64.zip $(PROJECT)-v$(VERSION)-windows-amd64/
-	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64
-	@echo "  ✔ $(PROJECT)-v$(VERSION)-windows-amd64.zip"
+	cd $(DIST_DIR) && zip -rq $(PROJECT)-v$(DIST_VERSION)-windows-amd64.zip $(PROJECT)-v$(DIST_VERSION)-windows-amd64/
+	@rm -rf $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64
+	@echo "  ✔ $(PROJECT)-v$(DIST_VERSION)-windows-amd64.zip"
 	@echo ""
 	@echo "=== 三平台打包完成 ==="
-	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-amd64.tar.gz
-	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-linux-arm64.tar.gz
-	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(VERSION)-windows-amd64.zip
+	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-amd64.tar.gz
+	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-linux-arm64.tar.gz
+	@ls -lh $(DIST_DIR)/$(PROJECT)-v$(DIST_VERSION)-windows-amd64.zip
 	@echo ""
 
 # ── .deb 打包 ───────────────────────────────────────────
@@ -127,18 +142,18 @@ deb-amd64: build-linux-amd64
 	@mkdir -p /tmp/deb-amd64/DEBIAN /tmp/deb-amd64/usr/local/bin
 	cp $(BIN_DIR)/$(PROJECT) /tmp/deb-amd64/usr/local/bin/$(PROJECT)
 	chmod 755 /tmp/deb-amd64/usr/local/bin/$(PROJECT)
-	printf 'Package: %s\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: IEC104 Simulator <dev@example.com>\nDescription: IEC 60870-5-104 Simulator with Web Management\n Supports multi-instance IEC104 simulation with\n web-based configuration and monitoring.\nBuilt-Using: go1.22.5\n' $(PROJECT) $(VERSION) > /tmp/deb-amd64/DEBIAN/control
+	printf 'Package: %s\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: IEC104 Simulator <dev@example.com>\nDescription: IEC 60870-5-104 Simulator with Web Management\n Supports multi-instance IEC104 simulation with\n web-based configuration and monitoring.\nBuilt-Using: go1.22.5\n' $(PROJECT) $(DIST_VERSION) > /tmp/deb-amd64/DEBIAN/control
 	cd /tmp/deb-amd64 && find . -type f ! -path './DEBIAN/*' -exec md5sum {} \; > DEBIAN/md5sums
-	dpkg-deb --build /tmp/deb-amd64 $(BIN_DIR)/$(PROJECT)_$(VERSION)_amd64.deb
+	dpkg-deb --build /tmp/deb-amd64 $(BIN_DIR)/$(PROJECT)_$(DIST_VERSION)_amd64.deb
 	@rm -rf /tmp/deb-amd64
 
 deb-arm64: build-linux-arm64
 	@mkdir -p /tmp/deb-arm64/DEBIAN /tmp/deb-arm64/usr/local/bin
 	cp $(BIN_DIR)/$(PROJECT)-linux-arm64 /tmp/deb-arm64/usr/local/bin/$(PROJECT)
 	chmod 755 /tmp/deb-arm64/usr/local/bin/$(PROJECT)
-	printf 'Package: %s\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: arm64\nMaintainer: IEC104 Simulator <dev@example.com>\nDescription: IEC 60870-5-104 Simulator with Web Management\n Supports multi-instance IEC104 simulation with\n web-based configuration and monitoring.\nBuilt-Using: go1.22.5\n' $(PROJECT) $(VERSION) > /tmp/deb-arm64/DEBIAN/control
+	printf 'Package: %s\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: arm64\nMaintainer: IEC104 Simulator <dev@example.com>\nDescription: IEC 60870-5-104 Simulator with Web Management\n Supports multi-instance IEC104 simulation with\n web-based configuration and monitoring.\nBuilt-Using: go1.22.5\n' $(PROJECT) $(DIST_VERSION) > /tmp/deb-arm64/DEBIAN/control
 	cd /tmp/deb-arm64 && find . -type f ! -path './DEBIAN/*' -exec md5sum {} \; > DEBIAN/md5sums
-	dpkg-deb --build /tmp/deb-arm64 $(BIN_DIR)/$(PROJECT)_$(VERSION)_arm64.deb
+	dpkg-deb --build /tmp/deb-arm64 $(BIN_DIR)/$(PROJECT)_$(DIST_VERSION)_arm64.deb
 	@rm -rf /tmp/deb-arm64
 
 deb: deb-amd64 deb-arm64

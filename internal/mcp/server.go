@@ -123,7 +123,7 @@ func NewDataInterfaceServer(client *SimulatorClient) *server.MCPServer {
 		mcp.WithString("instance_id", mcp.Description("实例ID")),
 		mcp.WithArray("ioas",
 			mcp.Description("可选！指定要读取的 IOA 列表，不传则返回全部测点"),
-			mcp.Items("number"),
+			mcp.WithNumberItems(),
 		),
 	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
 		instID := getStringArg(args, "instance_id")

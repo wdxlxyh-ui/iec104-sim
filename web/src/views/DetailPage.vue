@@ -32,6 +32,58 @@
 
     <template v-if="instanceStatus === 'running'">
       <el-card shadow="never" style="margin-bottom: 16px">
+        <div style="display: flex; justify-content: space-between; align-items: center; cursor: user-select: none" @click="csvMultiExpanded = !csvMultiExpanded">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="font-size: 14px; font-weight: 600">CSV 多测点回放</span>
+            <el-tag v-if="csvMultiRunning" type="success" size="small">运行中</el-tag>
+            <el-tag v-else type="info" size="small">未启用</el-tag>
+          </div>
+          <el-icon :style="{ transform: csvMultiExpanded ? 'rotate(180deg)' : '', transition: 'transform .2s' }"><ArrowDown /></el-icon>
+        </div>
+        <div v-show="csvMultiExpanded" style="margin-top: 16px">
+          <el-form label-width="90px" size="small">
+            <el-form-item label="CSV文件">
+              <div style="display: flex; gap: 8px; align-items: center">
+                <el-input v-model="csvMultiForm.csv_file" placeholder="文件名" style="width: 200px" readonly />
+                <el-button size="small" @click="triggerCsvMultiUpload">上传</el-button>
+                <input ref="csvMultiUploadRef" type="file" accept=".csv" style="display: none" @change="uploadCsvMultiFile" />
+                <span v-if="csvMultiFileLoaded" style="font-size: 12px; color: #10b981">✓ 已加载 {{ csvMultiColCount }} 列</span>
+              </div>
+            </el-form-item>
+            <el-form-item label="时间格式">
+              <el-radio-group v-model="csvMultiForm.time_format">
+                <el-radio value="relative">相对时间</el-radio>
+                <el-radio value="absolute">绝对时刻 (hh:mm:ss)</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="时间单位" v-if="csvMultiForm.time_format === 'relative'">
+              <el-radio-group v-model="csvMultiForm.time_unit">
+                <el-radio value="ms">毫秒</el-radio>
+                <el-radio value="s">秒</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="测点映射">
+              <div style="display: flex; flex-direction: column; gap: 8px; width: 100%">
+                <div v-for="(m, idx) in csvMultiMappings" :key="idx" style="display: flex; align-items: center; gap: 8px">
+                  <span style="min-width: 60px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: #3b82f6; background: rgba(59,130,246,.1); padding: 2px 8px; border-radius: 4px; text-align: center;">Value{{ idx + 1 }}</span>
+                  <el-select v-model="m.ioa" placeholder="选择测点" filterable clearable style="flex: 1; min-width: 0">
+                    <el-option v-for="p in points" :key="p.ioa" :label="`${p.name} (IOA:${p.ioa})`" :value="p.ioa" />
+                  </el-select>
+                </div>
+                <el-button size="small" type="primary" @click="addCsvMultiMapping" :disabled="csvMultiMappings.length >= csvMultiColCount || csvMultiMappings.length >= 10" plain>+ 添加映射列</el-button>
+              </div>
+            </el-form-item>
+            <el-form-item>
+              <div style="display: flex; gap: 8px">
+                <el-button type="primary" size="small" @click="saveCsvMultiConfig" :disabled="!csvMultiForm.csv_file">保存并启用</el-button>
+                <el-button type="danger" size="small" @click="stopCsvMultiConfig" :disabled="!csvMultiRunning">停止</el-button>
+              </div>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-card>
+
+      <el-card shadow="never" style="margin-bottom: 16px">
         <div class="toolbar">
           <span style="font-size: 13px; color: #666; font-weight: 500">批量操作：</span>
           <el-button size="small" @click="openBatchModal">批量配置</el-button>
@@ -202,8 +254,8 @@
             </el-form-item>
             <el-form-item label="时间格式">
               <el-radio-group v-model="autoForm.time_format">
+                <el-radio value="relative">相对时间</el-radio>
                 <el-radio value="absolute">绝对时刻 (hh:mm:ss)</el-radio>
-                <el-radio value="relative">相对时刻 (ms)</el-radio>
               </el-radio-group>
             </el-form-item>
             <el-form-item label="时间单位" v-if="autoForm.time_format === 'relative'">
@@ -406,9 +458,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
-  getPoints, setPointValue, setAutoChange, batchAutoChange,
+  getPoints, setPointValue, setAutoChange, getAutoChange, batchAutoChange,
   exportAutoConfig as fetchExport, importAutoConfig as fetchImport,
   exportPointsCSV, uploadCSV, getInstance, listInstances,
   type PointSnapshot, type InstanceState,
@@ -431,6 +484,19 @@ const selectedIoas = reactive<Record<number, boolean>>({})
 const importInputRef = ref<HTMLInputElement>()
 const csvUploadRef = ref<HTMLInputElement>()
 
+const csvMultiExpanded = ref(false)
+const csvMultiRunning = ref(false)
+const csvMultiUploadRef = ref<HTMLInputElement>()
+const csvMultiFileLoaded = ref(false)
+const csvMultiColCount = ref(0)
+const csvMultiForm = reactive({
+  csv_file: '',
+  time_format: 'relative',
+  time_unit: 'ms',
+})
+const csvMultiMappings = reactive<{ ioa: number }[]>([])
+const csvMultiIoas = ref<number[]>([])
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // Auto-change dialog
@@ -451,6 +517,7 @@ const autoForm = reactive({
   csv_file: '',
   time_format: 'absolute',
   time_unit: 'ms',
+  csv_column_map: '',
   para_a: '',
   para_b: '',
   init_soc: 50,
@@ -841,19 +908,19 @@ function openBatchModal() {
 }
 
 function resetAutoForm() {
-   Object.assign(autoForm, {
-     start_value: 0, step: 1, period_ms: 1000, max_value: 100,
-     min_value: 0, max_value_r: 100, decimal_places: 0,
-     csv_file: '', time_format: 'absolute', time_unit: 'ms',
-     para_a: '', para_b: '',
-     init_soc: 50, rated_cap: 100, power_ioa: 16385, integral_ms: 1000,
-     init_energy: 0, stat_type: 0, energy_power_ioa: 16385, energy_period_ms: 1000,
-     follow_ao_ioa: 0, api_init_value: 0,
-   })
-   customSelectedIoas.value = []
-   customFormulaTokens.value = []
-   customForm.period_ms = 1000
- }
+    Object.assign(autoForm, {
+      start_value: 0, step: 1, period_ms: 1000, max_value: 100,
+      min_value: 0, max_value_r: 100, decimal_places: 0,
+      csv_file: '', time_format: 'absolute', time_unit: 'ms', csv_column_map: '',
+      para_a: '', para_b: '',
+      init_soc: 50, rated_cap: 100, power_ioa: 16385, integral_ms: 1000,
+      init_energy: 0, stat_type: 0, energy_power_ioa: 16385, energy_period_ms: 1000,
+      follow_ao_ioa: 0, api_init_value: 0,
+    })
+    customSelectedIoas.value = []
+    customFormulaTokens.value = []
+    customForm.period_ms = 1000
+  }
 
 async function confirmAutoChange() {
   const params: any = {}
@@ -992,6 +1059,104 @@ async function uploadCSVFile(e: Event) {
   } catch (e: any) {
     ElMessage.error('CSV 上传失败: ' + (e?.response?.data?.error || e.message))
   }
+}
+
+function triggerCsvMultiUpload() {
+  csvMultiUploadRef.value?.click()
+}
+
+async function uploadCsvMultiFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length) return
+  const file = input.files[0]
+  try {
+    const res = await uploadCSV(instanceId.value, file)
+    csvMultiForm.csv_file = res.filename
+    csvMultiFileLoaded.value = true
+    ElMessage.success('CSV 上传成功')
+    input.value = ''
+
+    const text = await file.text()
+    const lines = text.trim().split('\n')
+    if (lines.length >= 1) {
+      const cols = lines[0].split(',').length - 1
+      csvMultiColCount.value = Math.min(cols, 10)
+      csvMultiMappings.length = 0
+      for (let i = 0; i < csvMultiColCount.value; i++) {
+        csvMultiMappings.push({ ioa: 0 })
+      }
+    }
+  } catch (e: any) {
+    ElMessage.error('CSV 上传失败: ' + (e?.response?.data?.error || e.message))
+  }
+}
+
+function addCsvMultiMapping() {
+  if (csvMultiMappings.length >= csvMultiColCount.value || csvMultiMappings.length >= 10) return
+  csvMultiMappings.push({ ioa: 0 })
+}
+
+async function saveCsvMultiConfig() {
+  const activeMappings = csvMultiMappings.filter(m => m.ioa > 0)
+  if (activeMappings.length === 0) {
+    ElMessage.warning('请至少映射一个测点')
+    return
+  }
+  if (!csvMultiForm.csv_file) {
+    ElMessage.warning('请先上传 CSV 文件')
+    return
+  }
+
+  const promises = activeMappings.map((m, idx) =>
+    setAutoChange(instanceId.value, m.ioa, {
+      strategy: 'csv',
+      enabled: true,
+      params: {
+        csv_file: csvMultiForm.csv_file,
+        time_format: csvMultiForm.time_format,
+        time_unit: csvMultiForm.time_unit,
+        csv_column_map: JSON.stringify({ [idx + 1]: m.ioa }),
+      },
+    })
+  )
+
+  try {
+    await Promise.all(promises)
+    csvMultiRunning.value = true
+    csvMultiIoas.value = activeMappings.map(m => m.ioa)
+    ElMessage.success(`已启用 ${activeMappings.length} 个测点的 CSV 回放`)
+    await fetchPoints()
+  } catch (e: any) {
+    ElMessage.error('保存失败: ' + (e?.response?.data?.error || e.message))
+  }
+}
+
+async function stopCsvMultiConfig() {
+  try {
+    await ElMessageBox.confirm('确定停止 CSV 多测点回放？', '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+
+  const stopPromises = csvMultiIoas.value.map(ioa =>
+    setPointValue(instanceId.value, ioa, { value: points.value.find(p => p.ioa === ioa)?.value || 0 }).catch(() => {})
+  )
+  await Promise.all(stopPromises)
+
+  const delPromises = csvMultiIoas.value.map(ioa =>
+    (async () => {
+      try {
+        const api = await import('../api')
+        await api.deleteAutoChange(instanceId.value, ioa)
+      } catch {}
+    })()
+  )
+  await Promise.all(delPromises)
+
+  csvMultiRunning.value = false
+  csvMultiIoas.value = []
+  ElMessage.success('CSV 多测点回放已停止')
+  await fetchPoints()
 }
 
 function downloadBlob(blob: Blob, filename: string) {

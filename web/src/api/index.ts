@@ -143,6 +143,7 @@ export interface StrategyParams {
    csv_file?: string
    time_format?: string
    time_unit?: string
+   csv_column_map?: string
    para_a?: string
    para_b?: string
    init_soc?: number
@@ -157,7 +158,7 @@ export interface StrategyParams {
    api_init_value?: number
    custom_ioas?: string
    custom_formula?: string
- }
+  }
 
 export interface AutoChangeConfig {
   ioa: number

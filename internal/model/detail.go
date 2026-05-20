@@ -29,6 +29,7 @@ type StrategyParams struct {
 	CSVFileName     string  `json:"csv_file,omitempty"`
 	TimeFormat      string  `json:"time_format,omitempty"`
 	TimeUnit        string  `json:"time_unit,omitempty"`
+	CSVColumnMap    string  `json:"csv_column_map,omitempty"`
 	ParaA           string  `json:"para_a,omitempty"`
 	ParaB           string  `json:"para_b,omitempty"`
 	InitSOC         float64 `json:"init_soc,omitempty"`

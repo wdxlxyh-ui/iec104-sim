@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	mcp "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -87,6 +88,20 @@ func NewInstanceManagerServer(client *SimulatorClient) *server.MCPServer {
 		mcp.WithDescription("获取模拟器全局状态，包括所有实例的运行数/总数"),
 	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
 		return c.GetServerStatus()
+	}))
+
+	// list_files
+	s.AddTool(mcp.NewTool("list_files",
+		mcp.WithDescription("列出 config 目录下所有 .xlsx 点表文件"),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		return c.ListFiles()
+	}))
+
+	// get_protocols
+	s.AddTool(mcp.NewTool("get_protocols",
+		mcp.WithDescription("查询模拟器支持的协议类型（如 IEC104、Modbus TCP）"),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		return c.GetProtocols()
 	}))
 
 	return s
@@ -319,6 +334,95 @@ func NewDataInterfaceServer(client *SimulatorClient) *server.MCPServer {
 			return nil, fmt.Errorf("filename and content_base64 are required")
 		}
 		return c.UploadFile(filename, content)
+	}))
+
+	// export_points_csv — 导出测点实时数据为 CSV
+	s.AddTool(mcp.NewTool("export_points_csv",
+		mcp.WithDescription("导出实例所有测点实时数据为 CSV 格式（信息体地址/名称/类型/值/时间）"),
+		mcp.WithString("instance_id", mcp.Description("实例ID")),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		return c.ExportPointsCSV(getStringArg(args, "instance_id"))
+	}))
+
+	// batch_config_auto_change
+	s.AddTool(mcp.NewTool("batch_config_auto_change",
+		mcp.WithDescription("批量配置多个测点的自动变化策略。一次调用为多个 IOA 应用同一策略配置。"),
+		mcp.WithString("instance_id", mcp.Description("实例ID")),
+		mcp.WithArray("ioas",
+			mcp.Description("要配置的 IOA 列表"),
+			mcp.WithNumberItems(),
+			mcp.Required(),
+		),
+		mcp.WithString("strategy", mcp.Description("策略类型: increment/random/csv/max/min/soc/energy/aofollow/apiupdate/manual/custom"), mcp.Required()),
+		mcp.WithBoolean("enabled", mcp.Description("是否启用"), mcp.Required()),
+		mcp.WithString("params", mcp.Description("策略参数 JSON 字符串")),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		instID := getStringArg(args, "instance_id")
+		ioas := args["ioas"].([]any)
+		ioaNums := make([]uint32, 0, len(ioas))
+		for _, v := range ioas {
+			switch n := v.(type) {
+			case float64:
+				ioaNums = append(ioaNums, uint32(n))
+			case string:
+				if n2, err := strconv.ParseUint(n, 10, 32); err == nil {
+					ioaNums = append(ioaNums, uint32(n2))
+				}
+			}
+		}
+		if len(ioaNums) == 0 {
+			return nil, fmt.Errorf("ioas array is required and must not be empty")
+		}
+
+		paramsStr := getStringArg(args, "params")
+		params := json.RawMessage("{}")
+		if paramsStr != "" {
+			params = json.RawMessage(paramsStr)
+		}
+
+		body, err := json.Marshal(map[string]any{
+			"ioas":   ioaNums,
+			"config": map[string]any{
+				"strategy": getStringArg(args, "strategy"),
+				"enabled":  getBoolArg(args, "enabled"),
+				"params":   params,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshal config: %w", err)
+		}
+		return c.BatchConfigAutoChange(instID, body)
+	}))
+
+	// update_qds
+	s.AddTool(mcp.NewTool("update_qds",
+		mcp.WithDescription("更新测点的品质描述 QDS（invalid/not_topical/substituted/overflow/blocked）。传统模式 API。"),
+		mcp.WithNumber("ioa", mcp.Description("信息体地址")),
+		mcp.WithBoolean("invalid", mcp.Description("无效标志")),
+		mcp.WithBoolean("not_topical", mcp.Description("非当前标志")),
+		mcp.WithBoolean("substituted", mcp.Description("替代标志")),
+		mcp.WithBoolean("overflow", mcp.Description("溢出标志")),
+		mcp.WithBoolean("blocked", mcp.Description("闭锁标志")),
+	), toolHandler(client, func(c *SimulatorClient, args map[string]any) (any, error) {
+		ioa := getUint32Arg(args, "ioa")
+		body := map[string]any{}
+		if v, exists := args["invalid"]; exists {
+			body["invalid"] = v
+		}
+		if v, exists := args["not_topical"]; exists {
+			body["not_topical"] = v
+		}
+		if v, exists := args["substituted"]; exists {
+			body["substituted"] = v
+		}
+		if v, exists := args["overflow"]; exists {
+			body["overflow"] = v
+		}
+		if v, exists := args["blocked"]; exists {
+			body["blocked"] = v
+		}
+		raw, _ := json.Marshal(body)
+		return c.UpdateQDS(ioa, raw)
 	}))
 
 	return s

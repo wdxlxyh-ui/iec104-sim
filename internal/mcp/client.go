@@ -152,6 +152,22 @@ func (c *SimulatorClient) ExportPointsCSV(instID string) (json.RawMessage, error
 	return c.get(fmt.Sprintf("/api/v1/instances/%s/points/export", instID))
 }
 
+func (c *SimulatorClient) BatchConfigAutoChange(instID string, body json.RawMessage) (json.RawMessage, error) {
+	return c.put(fmt.Sprintf("/api/v1/instances/%s/points/auto-change/batch", instID), body)
+}
+
+func (c *SimulatorClient) ListFiles() (json.RawMessage, error) {
+	return c.get("/api/v1/files")
+}
+
+func (c *SimulatorClient) GetProtocols() (json.RawMessage, error) {
+	return c.get("/api/v1/protocols")
+}
+
+func (c *SimulatorClient) UpdateQDS(ioa uint32, body json.RawMessage) (json.RawMessage, error) {
+	return c.put(fmt.Sprintf("/api/points/%d/qds", ioa), body)
+}
+
 // ---- HTTP helpers ----
 
 func (c *SimulatorClient) get(path string) (json.RawMessage, error) {

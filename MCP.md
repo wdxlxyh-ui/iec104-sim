@@ -1,6 +1,6 @@
 # IEC 104 模拟器 MCP 使用指南
 
-> 版本: 1.0 | 更新日期: 2026-05-16
+> 版本: 1.1 | 更新日期: 2026-05-20
 
 ## 概述
 
@@ -60,12 +60,22 @@ go build -o bin/mcp-server ./cmd/mcp-server/
 | `write_point` | 写入单个测点的值 |
 | `write_points` | **【核心】** 批量写入多个测点的值 |
 | `config_auto_change` | 配置测点的自动变化策略 |
+| `batch_config_auto_change` | **【新增】** 批量配置多个测点的自动变化策略 |
 | `get_auto_change` | 查看测点的自动变化配置 |
 | `delete_auto_change` | 删除测点的自动变化配置 |
 | `export_auto_changes` | 导出实例所有自动变化配置为 CSV |
 | `import_auto_changes` | 从 CSV 内容导入自动变化配置 |
 | `upload_csv` | 上传 CSV 时间序列文件（用于 CSV 回放） |
 | `upload_file` | 上传 .xlsx 点表文件 |
+| `export_points_csv` | 导出实例所有测点实时数据为 CSV |
+| `update_qds` | 更新测点的品质描述 QDS |
+
+### 全局工具
+
+| 工具名称 | 说明 |
+|----------|------|
+| `list_files` | 列出 config 目录下所有 .xlsx 点表文件 |
+| `get_protocols` | 查询模拟器支持的协议类型 |
 
 ## 使用示例
 
@@ -171,5 +181,6 @@ Error: dial tcp connection refused
 
 ## 版本信息
 
-- IEC104 Simulator: 2.2.0+
-- MCP Server: 1.0.0
+- IEC104 Simulator: 2.5.1+
+- MCP Server: 1.1.0
+- 工具总数: 26

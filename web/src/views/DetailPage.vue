@@ -1168,6 +1168,42 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+async function restoreCsvMultiState() {
+  const csvPoints: { ioa: number; col: number; file: string; timeFormat: string; timeUnit: string }[] = []
+  for (const p of points.value) {
+    try {
+      const cfg = await getAutoChange(instanceId.value, p.ioa)
+      if (cfg && cfg.strategy === 'csv' && cfg.enabled && cfg.params.csv_column_map) {
+        try {
+          const map = JSON.parse(cfg.params.csv_column_map)
+          const entries = Object.entries(map)
+          if (entries.length === 1) {
+            const col = parseInt(entries[0][0])
+            csvPoints.push({ ioa: p.ioa, col, file: cfg.params.csv_file || '', timeFormat: cfg.params.time_format || 'relative', timeUnit: cfg.params.time_unit || 'ms' })
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+  if (csvPoints.length === 0) return
+
+  csvPoints.sort((a, b) => a.col - b.col)
+  csvMultiRunning.value = true
+  csvMultiIoas.value = csvPoints.map(p => p.ioa)
+  csvMultiForm.csv_file = csvPoints[0].file
+  csvMultiForm.time_format = csvPoints[0].timeFormat
+  csvMultiForm.time_unit = csvPoints[0].timeUnit
+  csvMultiFileLoaded.value = true
+
+  const maxCol = Math.max(...csvPoints.map(p => p.col))
+  csvMultiColCount.value = maxCol
+  csvMultiMappings.length = 0
+  for (let i = 1; i <= maxCol; i++) {
+    const pt = csvPoints.find(p => p.col === i)
+    csvMultiMappings.push({ ioa: pt ? pt.ioa : 0 })
+  }
+}
+
 async function loadInstanceState() {
   try {
     const state: InstanceState = await getInstance(instanceId.value)
@@ -1185,6 +1221,7 @@ onMounted(async () => {
   await loadInstanceState()
   if (instanceStatus.value === 'running') {
     await fetchPoints()
+    await restoreCsvMultiState()
     pollingEnabled.value = true
     restartPolling()
   } else {

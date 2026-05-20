@@ -1,8 +1,15 @@
 <template>
   <div>
     <el-card shadow="never" style="margin-bottom: 16px">
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <span style="font-size: 16px; font-weight: 600">实例配置</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 16px; font-weight: 600">实例配置</span>
+          <span v-if="globalStatus" style="font-size: 13px; color: var(--el-text-color-secondary)">
+            已配置 {{ globalStatus.configured }} / {{ globalStatus.max }} |
+            运行中 <span style="color: #67c23a">{{ globalStatus.running }}</span> |
+            已停止 <span style="color: #909399">{{ globalStatus.stopped }}</span>
+          </span>
+        </div>
         <div>
           <el-button @click="fetchData" :icon="Refresh" circle aria-label="刷新数据" />
           <el-button type="primary" @click="showAddDialog = true">添加实例</el-button>
@@ -129,12 +136,15 @@ import {
   stopInstance,
   uploadExcel,
   listFiles,
+  getStatus,
   type InstanceConfig,
   type InstanceState,
+  type GlobalStatus,
 } from '../api'
 
 const loading = ref(false)
 const instances = ref<InstanceState[]>([])
+const globalStatus = ref<GlobalStatus | null>(null)
 const showAddDialog = ref(false)
 const editing = ref(false)
 const saving = ref(false)
@@ -172,6 +182,7 @@ async function fetchData() {
   loading.value = true
   try {
     instances.value = await listInstances()
+    globalStatus.value = await getStatus()
   } catch (e: any) {
     ElMessage.error('获取实例列表失败: ' + (e?.response?.data?.error || e.message))
   } finally {

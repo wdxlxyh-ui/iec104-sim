@@ -11,6 +11,7 @@
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| **v2.5.1** | 2026-05-20 | **前端实例容量显示** — ConfigPage 顶部显示已配置/1000、运行中、已停止计数 |
 | **v2.5.0** | 2026-05-20 | **CSV 多测点同步回放** — 独立卡片UI、多列CSV映射、相对/绝对时间支持、状态持久化 |
 | **v2.4.0** | 2026-05-19 | **Modbus TCP + CSV 时序修复** — Modbus TCP 协议支持、CSV 回放时序控制修复、功能码/寄存器地址显示修复、实例上限 1000 |
 | **v2.2.0** | 2026-05-15 | **最终版: EGC自动化测试框架+趋势页+CSV修复** — TrendPage多线SVG趋势对比, 100ms~5s轮询, CSV上传路径修复, 用户登录方案设计 |
@@ -21,6 +22,11 @@
 | v2.0.1 | 2026-05 | HTTP 开关控制、API 文档、iptables 防火墙自动管理 |
 | v2.0 | 2026-05 | 多实例管理模式（serve 子命令）、Vue 3 Web 管理界面 |
 | v1.0 | - | 传统单实例模式 |
+
+### v2.5.1 新特性
+
+- **前端实例容量显示** — ConfigPage 顶部显示全局状态：已配置 X / 1000 | 运行中 | 已停止
+- 调用 `/api/v1/status` 获取 MaxInstances 等全局信息，与后端保持一致
 
 ### v2.5.0 新特性
 
@@ -88,6 +94,8 @@
 - **单客户端限制** — 每个实例只接受一个客户端连接
 - **跨平台编译** — Linux amd64/arm64、Windows amd64、`.deb` 打包
 - **自动变更策略** — 11种内置策略，后台独立 goroutine 调度，实例启停自动管理
+- **多规约支持** — IEC 104 + Modbus TCP 并行运行
+- **MCP Server** — 提供 IEC104 Simulator MCP 工具，支持 AI 助手直接控制模拟器
 
 ---
 
@@ -109,8 +117,8 @@
 ### 方式一：下载压缩包（推荐）
 
 ```bash
-tar xzf iec104-sim-v2.1.tar.gz
-cd iec104-sim-v2.1
+tar xzf iec104-sim-v2.5.1.tar.gz
+cd iec104-sim-v2.5.1
 ./start.sh
 # 浏览器访问 http://localhost:8989
 ```
@@ -266,26 +274,39 @@ curl -X PUT http://localhost:8989/api/v1/instances/{id}/points/auto-change/16385
 ├── internal/
 │   ├── detail/            v2.1 详情页模块
 │   │   ├── engine.go      自动变化调度引擎
-│   │   ├── strategy.go    11种策略计算逻辑
+│   │   ├── strategy.go    11种策略计算逻辑 + CSV多测点回放
 │   │   ├── handler.go     详情页 HTTP API
-│   │   └── store.go       自动变化配置持久化
+│   │   ├── store.go       自动变化配置持久化
+│   │   └── csv_replay_test.go  CSV回放自测（6场景）
 │   ├── manager/           多实例生命周期管理（最多1000个）
 │   ├── model/             数据模型（实例配置/状态/详情）
-│   └── storage/           JSON 配置持久化
+│   ├── storage/           JSON 配置持久化
+│   └── mcp/               MCP Server（IEC104 Simulator MCP）
 ├── pkg/
 │   ├── api/               HTTP API 处理器
 │   ├── config/            Excel 加载器 + 测点数据模型
 │   ├── iec104/            IEC 104 服务端
-│   └── library/           并发安全内存点表
+│   ├── library/           并发安全内存点表
+│   ├── protocol/          多规约协议支持
+│   │   ├── protocol.go    协议接口定义
+│   │   ├── factory.go     协议工厂
+│   │   ├── iec104_wrapper.go  IEC104 协议包装
+│   │   └── modbus/        Modbus TCP 协议实现
+│   │       ├── tcp_server.go  Modbus TCP 服务端
+│   │       └── converter.go   数据类型转换
+│   └── middleware/        HTTP 中间件（恢复、认证等）
 ├── web/                   Vue 3 + Element Plus 前端
 │   ├── src/views/
-│   │   ├── ConfigPage.vue     配置管理
+│   │   ├── ConfigPage.vue     配置管理（含实例容量显示）
 │   │   ├── MonitorPage.vue    运行监控
-│   │   └── DetailPage.vue     v2.1 实例详情页
-│   └── src/api/           Axios API 客户端
+│   │   ├── DetailPage.vue     v2.1 实例详情页 + v2.5 CSV多测点回放
+│   │   └── TrendPage.vue      v2.2 趋势对比页
+│   ├── src/api/           Axios API 客户端
+│   └── src/composables/   Vue composables（useApi）
 ├── scripts/               启停脚本
 ├── config/                运行时配置
-└── samples/               示例点表
+├── samples/               示例点表
+└── manuals/               使用手册
 ```
 
 ---
@@ -347,7 +368,7 @@ curl -X PUT http://localhost:8080/api/points/16385 \
 
 ---
 
-## 自动变化策略说明（v2.1）
+## 自动变化策略说明
 
 | 策略 | 说明 | 适用场景 |
 |--------|------|-------------|
@@ -360,6 +381,8 @@ curl -X PUT http://localhost:8080/api/points/16385 \
 | 电量 | 基于功率积分计算累计电量 | 电能计量仿真 |
 | AO关联 | 跟随指定 AO 点的遥控值变化 | 遥调联动模拟 |
 | 接口更新 | 仅允许 HTTP API 写入，引擎不做计算 | 外部系统联调 |
+| 手动 | 不自动计算，需 API 置数 | 外部系统联调 |
+| 自定义公式 | 支持四则运算公式，2~50个关联测点 | 复杂联动模拟 |
 
 ---
 

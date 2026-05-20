@@ -5,6 +5,15 @@ const http = axios.create({
   timeout: 10000,
 })
 
+const TOKEN_KEY = 'iec104_token'
+export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY) }
+export function setToken(token: string) { localStorage.setItem(TOKEN_KEY, token) }
+export function clearToken() { localStorage.removeItem(TOKEN_KEY) }
+export async function login(username: string, password: string): Promise<{ token: string }> {
+  const res = await axios.post('/api/v1/login', { username, password })
+  return res.data
+}
+
 export interface ModbusConfig {
   port?: number
   byte_order?: string
